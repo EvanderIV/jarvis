@@ -8,6 +8,10 @@ import java.nio.charset.StandardCharsets;
 import org.vosk.Model;
 import org.vosk.Recognizer;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonObject;
+import com.jarvis.ParsedCommand;
+
 public class UdpListener implements Runnable {
 
     private final DatagramSocket socket;
@@ -96,14 +100,25 @@ public class UdpListener implements Runnable {
                         
                         // Extract the final JSON result
                         String resultJson = recognizer.getFinalResult();
-                        System.out.println("[+] Vosk Transcription: " + resultJson);
+
+                        Gson gson = new Gson();
+                        JsonObject jsonObject = gson.fromJson(resultJson, JsonObject.class);
+                        String transcribedText = jsonObject.has("text") ? jsonObject.get("text").getAsString() : "";
+
+                        String cleanedText = transcribedText.replaceAll("(?i)\\b(jarvis |jervis |drivers |travis |garbage |harvest )\\b", "").trim();
+
+                        System.out.println("[+] Vosk Transcription: " + cleanedText);
                         
-                        // TODO: Parse this JSON (using Gson) to extract the text and pass it to your logic engine!
+                        IntentParser parser = new IntentParser();
+                        ParsedCommand command = parser.parse(cleanedText);
+                        System.out.println("[+] Parsed Command: " + command);
                     }
                 }
                 
             }
 
+        } catch (MissingContextualTargetException e) {
+                System.err.println("[-] Parsing Error: " + e.getMessage());
         } catch (Exception e) {
                 if (running) {
                     System.err.println("Error in UDP listener: " + e.getMessage());

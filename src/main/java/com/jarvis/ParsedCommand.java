@@ -5,7 +5,7 @@ public class ParsedCommand {
 
     // --- The "Tokens" (Enums) ---
     public enum Action {
-        TURN_ON, TURN_OFF, INCREASE_VOLUME, DECREASE_VOLUME, PLAY_MUSIC, BANTER, UNKNOWN
+        TURN_ON, TURN_OFF, INCREASE_VOLUME, DECREASE_VOLUME, PLAY_MUSIC, BANTER, UTILITY, SET_TIMER, UNKNOWN
     }
 
     public enum Target {

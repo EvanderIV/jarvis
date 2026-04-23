@@ -23,6 +23,25 @@ public class IntentParser {
     private static final int MAX_HISTORY = 5;
     private final Map<Target, List<Action>> targetCapabilities = new HashMap<>();
 
+    /**
+     * Converts an integer to its English word representation (e.g., 1 -> "one", 21 -> "twenty one")
+     */
+    private String numberToEnglish(int num) {
+        String[] ones = {"", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
+        String[] tens = {"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"};
+        
+        if (num == 0) return "zero";
+        if (num < 10) return ones[num];
+        if (num < 20) {
+            String[] teens = {"ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", 
+                             "sixteen", "seventeen", "eighteen", "nineteen"};
+            return teens[num - 10];
+        }
+        int ten = num / 10;
+        int one = num % 10;
+        return tens[ten] + (one > 0 ? " " + ones[one] : "");
+    }
+
     public IntentParser() {
         // Map all the ways a user might phrase an action
         actionSynonyms.put(Action.TURN_ON, Arrays.asList("turn on", "enable", "start", "lights on", "activate"));
@@ -30,6 +49,17 @@ public class IntentParser {
         actionSynonyms.put(Action.INCREASE_VOLUME, Arrays.asList("louder", "turn up", "turn it up", "crank it up", "volume up"));
         actionSynonyms.put(Action.DECREASE_VOLUME, Arrays.asList("quieter", "turn down", "turn it down", "crank it down", "volume down"));
         actionSynonyms.put(Action.PLAY_MUSIC, Arrays.asList("play", "put on", "crank", "listen to"));
+        List<String> setTimer = Arrays.asList("set a timer", "start a timer", "countdown", "remind me in", "remind me to");
+        actionSynonyms.put(Action.SET_TIMER, setTimer);
+
+        List<String> getTime = Arrays.asList("what's the time", "what time is it", "current time", "tell me the time");
+        List<String> getWeather = Arrays.asList("what's the weather", "what's the temperature", "current weather", "current temperature", "tell me the weather", "tell me the temperature");
+        
+        List<String> utilities = new LinkedList<>();
+        utilities.addAll(getTime);
+        utilities.addAll(getWeather);
+
+        actionSynonyms.put(Action.UTILITY, utilities);
 
 
 
@@ -48,6 +78,8 @@ public class IntentParser {
         targetSynonyms.put(Target.BEDROOM_FAN, Arrays.asList("fan", "bedroom fan", "ceiling fan"));
         List<String> speakerSynonyms = new LinkedList<>(Arrays.asList("speaker", "music", "sound system", "stereo", "speaker array")); // Speaker selector + banter overlap
         speakerSynonyms.addAll(banter);
+        speakerSynonyms.addAll(setTimer);
+        speakerSynonyms.addAll(utilities);
         targetSynonyms.put(Target.SPEAKER_ARRAY, speakerSynonyms);
 
         // Map target capabilities to validate context
@@ -70,7 +102,19 @@ public class IntentParser {
         parameterMap.put("electronic", Arrays.asList("electronic", "edm", "electro", "dance music"));
         parameterMap.put("ambient", Arrays.asList("ambient", "atmospheric", "background music"));
         parameterMap.put("wakeup", Arrays.asList("wake up", "morning music", "sunrise music"));
+        parameterMap.put("fancy_restaurant", Arrays.asList("fancy restaurant", "dinner music", "classy music", "elegant music"));
+        parameterMap.put("time", getTime);
+        parameterMap.put("weather", getWeather);
         parameterMap.put("jorkening", jorkening);
+        // Set param to the number of minutes for timers if they say "set a timer for 5 minutes" or "remind me in 10 minutes"
+        for (int i = 1; i <= 60; i++) {
+            String numberWord = numberToEnglish(i);
+            parameterMap.put(Integer.toString(i), Arrays.asList(
+                "remind me in " + numberWord + " minutes",
+                "set a timer for " + numberWord + " minutes",
+                "countdown " + numberWord + " minutes"
+            ));
+        }
     }
 
     /**
@@ -123,8 +167,8 @@ public class IntentParser {
         }
         
         // If they just said "play some music" with no genre, you can set a default
-        if (foundParameter == null) {
-            foundParameter = "default"; 
+        if (foundParameter == null && foundAction == Action.PLAY_MUSIC) {
+            foundParameter = "fancy_restaurant"; // Default genre if none specified
         }
         
         // If they said "play music", the context target inference might miss it. Force the target to speakers.

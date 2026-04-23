@@ -112,13 +112,20 @@ public class UdpListener implements Runnable {
                         IntentParser parser = new IntentParser();
                         ParsedCommand command = parser.parse(cleanedText);
                         System.out.println("[+] Parsed Command: " + command);
+                        
+                        // Execute the command
+                        CommandFulfiller fulfiller = new CommandFulfiller();
+                        CommandFulfiller.CommandResult result = fulfiller.fulfill(command);
+                        System.out.println(result);
                     }
                 }
                 
             }
 
         } catch (MissingContextualTargetException e) {
-                System.err.println("[-] Parsing Error: " + e.getMessage());
+            System.err.println("[-] Parsing Error: " + e.getMessage());
+        } catch (CommandUnfulfillableException e) {
+            System.err.println("[-] Error in UDP listener: " + e.getMessage());
         } catch (Exception e) {
                 if (running) {
                     System.err.println("Error in UDP listener: " + e.getMessage());

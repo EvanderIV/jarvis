@@ -78,6 +78,14 @@ public class UdpListener implements Runnable {
                 byte[] completeAudioPayload = audioStreamBuffer.toByteArray();
                 System.out.println("[+] Stream complete! Captured " + completeAudioPayload.length + " bytes of raw audio.");
                 
+                // Validate audio format
+                AudioFormatValidator.isVoskCompatible(completeAudioPayload, 
+                                                      AudioFormatValidator.VOSK_SAMPLE_RATE,
+                                                      AudioFormatValidator.VOSK_BITS_PER_SAMPLE,
+                                                      AudioFormatValidator.VOSK_CHANNELS);
+                long durationMs = AudioFormatValidator.calculateDurationMs(completeAudioPayload);
+                System.out.println("[*] Audio duration: " + durationMs + " ms");
+                
                 // Pass the captured audio to Vosk
                 if (voskModel != null && completeAudioPayload.length > 0) {
                     System.out.println("[*] Transcribing audio...");

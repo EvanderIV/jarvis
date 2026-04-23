@@ -6,7 +6,7 @@ import java.net.SocketException;
 public class App {
     
     // The port your ESP32s/Python spoofers will target
-    private static final int WAKE_WORD_PORT = 3900;
+    private static final int WAKE_WORD_PORT = 4900;
 
     public static void main(String[] args) {
         System.out.println("Initializing Arbitration Server...");

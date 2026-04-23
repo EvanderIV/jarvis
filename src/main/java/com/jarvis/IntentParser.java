@@ -29,25 +29,26 @@ public class IntentParser {
         actionSynonyms.put(Action.TURN_OFF, Arrays.asList("turn off", "disable", "stop", "lights off", "kill"));
         actionSynonyms.put(Action.INCREASE_VOLUME, Arrays.asList("louder", "turn up", "turn it up", "crank it up", "volume up"));
         actionSynonyms.put(Action.DECREASE_VOLUME, Arrays.asList("quieter", "turn down", "turn it down", "crank it down", "volume down"));
-        
-        // Simplified the play music triggers. We don't need the genres here anymore.
         actionSynonyms.put(Action.PLAY_MUSIC, Arrays.asList("play", "put on", "crank", "listen to"));
 
-        // Map all the ways a user might refer to a specific device
-        targetSynonyms.put(Target.KITCHEN_LIGHTS, Arrays.asList("kitchen light", "kitchen lights", "cooking lights"));
-        targetSynonyms.put(Target.LIVING_ROOM_TV, Arrays.asList("tv", "television", "living room tv", "the screen"));
-        targetSynonyms.put(Target.BEDROOM_FAN, Arrays.asList("fan", "bedroom fan", "ceiling fan"));
-        targetSynonyms.put(Target.SPEAKER_ARRAY, Arrays.asList("speaker", "music", "sound system", "stereo", "speaker array"));
+
 
         // Playful banter
-        List<String> jorkening = Arrays.asList("begin the jogging",    "begin the jorc running",    "begin the jaw cutting",    "begin the jerking",    "begin the ga running",    "begin the georgia running",    "begin the ga name",    "begin the drawer cutting", "begin the door cutting", "begin the jorc cutting",
-                                                    "initiate the jogging", "initiate the jorc running", "initiate the jaw cutting", "initiate the jerking", "initiate the ga running", "initiate the georgia running", "initiate the ga name", "begin the drawer cutting", "begin the door cutting", "initiate the jorc cutting");
+        List<String> jorkening = Arrays.asList("begin the jogging",    "begin the jorc running",    "begin the jaw cutting",    "begin the jerking",    "begin the ga running",    "begin the georgia running",    "begin the ga name",    "begin the drawer cutting", "begin the door cutting", "begin the jorc cutting",    "begin the darkening",    "begin the shortening",    "begin the jork getting",
+                                                    "initiate the jogging", "initiate the jorc running", "initiate the jaw cutting", "initiate the jerking", "initiate the ga running", "initiate the georgia running", "initiate the ga name", "begin the drawer cutting", "begin the door cutting", "initiate the jorc cutting", "initiate the darkening", "initiate the shortening", "initiate the jork getting");
         List<String> theGame = Arrays.asList("lost the game");
         List<String> banter = new LinkedList<>();
         banter.addAll(jorkening);
         banter.addAll(theGame);
         actionSynonyms.put(Action.BANTER, banter);
-        targetSynonyms.put(Target.SPEAKER_ARRAY, banter);
+
+        // Map all the ways a user might refer to a specific device
+        targetSynonyms.put(Target.KITCHEN_LIGHTS, Arrays.asList("kitchen light", "kitchen lights", "cooking lights"));
+        targetSynonyms.put(Target.LIVING_ROOM_TV, Arrays.asList("tv", "television", "living room tv", "the screen"));
+        targetSynonyms.put(Target.BEDROOM_FAN, Arrays.asList("fan", "bedroom fan", "ceiling fan"));
+        List<String> speakerSynonyms = new LinkedList<>(Arrays.asList("speaker", "music", "sound system", "stereo", "speaker array")); // Speaker selector + banter overlap
+        speakerSynonyms.addAll(banter);
+        targetSynonyms.put(Target.SPEAKER_ARRAY, speakerSynonyms);
 
         // Map target capabilities to validate context
         targetCapabilities.put(Target.KITCHEN_LIGHTS, Arrays.asList(Action.TURN_ON, Action.TURN_OFF));
@@ -56,7 +57,7 @@ public class IntentParser {
         // Added PLAY_MUSIC to the speaker array capabilities!
         targetCapabilities.put(Target.SPEAKER_ARRAY, Arrays.asList(Action.PLAY_MUSIC, Action.INCREASE_VOLUME, Action.DECREASE_VOLUME, Action.TURN_OFF));
 
-        // --- Define the Music Genres ---
+        // --- Define the Parameters ---
         // The Key is what your backend will receive. The List is what the user might say.
         parameterMap.put("jazz", Arrays.asList("jazz", "jazzy", "smooth jazz"));
         parameterMap.put("active", Arrays.asList("active", "energetic", "upbeat", "workout", "pump up"));
@@ -69,6 +70,7 @@ public class IntentParser {
         parameterMap.put("electronic", Arrays.asList("electronic", "edm", "electro", "dance music"));
         parameterMap.put("ambient", Arrays.asList("ambient", "atmospheric", "background music"));
         parameterMap.put("wakeup", Arrays.asList("wake up", "morning music", "sunrise music"));
+        parameterMap.put("jorkening", jorkening);
     }
 
     /**
@@ -109,27 +111,25 @@ public class IntentParser {
             if (foundTarget != Target.UNKNOWN) break;
         }
 
-        // NEW: Lex the Genre (Parameter) ONLY if the action is PLAY_MUSIC
-        if (foundAction == Action.PLAY_MUSIC) {
-            for (Map.Entry<String, List<String>> entry : parameterMap.entrySet()) {
-                for (String synonym : entry.getValue()) {
-                    if (normalizedText.contains(" " + synonym + " ") || normalizedText.contains(" " + synonym)) {
-                        foundParameter = entry.getKey(); // Set the parameter to the canonical genre key
-                        break;
-                    }
+        // Lex the Parameter (e.g., Music Genre)
+        for (Map.Entry<String, List<String>> entry : parameterMap.entrySet()) {
+            for (String synonym : entry.getValue()) {
+                if (normalizedText.contains(" " + synonym + " ") || normalizedText.contains(" " + synonym)) {
+                    foundParameter = entry.getKey(); // Set the parameter to the canonical genre key
+                    break;
                 }
-                if (foundParameter != null) break;
             }
-            
-            // If they just said "play some music" with no genre, you can set a default
-            if (foundParameter == null) {
-                foundParameter = "default"; 
-            }
-            
-            // If they said "play music", the context target inference might miss it. Force the target to speakers.
-            if (foundTarget == Target.UNKNOWN && normalizedText.contains(" music ")) {
-                foundTarget = Target.SPEAKER_ARRAY;
-            }
+            if (foundParameter != null) break;
+        }
+        
+        // If they just said "play some music" with no genre, you can set a default
+        if (foundParameter == null) {
+            foundParameter = "default"; 
+        }
+        
+        // If they said "play music", the context target inference might miss it. Force the target to speakers.
+        if (foundTarget == Target.UNKNOWN && normalizedText.contains(" music ")) {
+            foundTarget = Target.SPEAKER_ARRAY;
         }
 
         // --- Context Resolution ---

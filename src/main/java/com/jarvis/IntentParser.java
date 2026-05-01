@@ -24,6 +24,21 @@ public class IntentParser {
     private final Map<Target, List<Action>> targetCapabilities = new HashMap<>();
 
     /**
+     * Generates phrase combinations by prepending prefixes to base words
+     * E.g., generatePhrasePrefixes(["jogging"], "begin the ", "initiate the ") 
+     *       -> ["begin the jogging", "initiate the jogging"]
+     */
+    private List<String> generatePhrasePrefixes(List<String> baseWords, String... prefixes) {
+        List<String> result = new LinkedList<>();
+        for (String word : baseWords) {
+            for (String prefix : prefixes) {
+                result.add(prefix + word);
+            }
+        }
+        return result;
+    }
+
+    /**
      * Converts an integer to its English word representation (e.g., 1 -> "one", 21 -> "twenty one")
      */
     private String numberToEnglish(int num) {
@@ -44,8 +59,8 @@ public class IntentParser {
 
     public IntentParser() {
         // Map all the ways a user might phrase an action
-        actionSynonyms.put(Action.TURN_ON, Arrays.asList("turn on", "enable", "start", "lights on", "activate"));
-        actionSynonyms.put(Action.TURN_OFF, Arrays.asList("turn off", "disable", "stop", "lights off", "kill"));
+        actionSynonyms.put(Action.TURN_ON, Arrays.asList("turn on", "enable", "start", "lights on", "activate", "turn it on", "turn that on", "turn that thing on"));
+        actionSynonyms.put(Action.TURN_OFF, Arrays.asList("turn off", "disable", "stop", "lights off", "kill", "turn it off", "turn that off", "turn that thing off"));
         actionSynonyms.put(Action.INCREASE_VOLUME, Arrays.asList("louder", "turn up", "turn it up", "crank it up", "volume up"));
         actionSynonyms.put(Action.DECREASE_VOLUME, Arrays.asList("quieter", "turn down", "turn it down", "crank it down", "volume down"));
         actionSynonyms.put(Action.PLAY_MUSIC, Arrays.asList("play", "put on", "crank", "listen to"));
@@ -64,8 +79,16 @@ public class IntentParser {
 
 
         // Playful banter
-        List<String> jorkening = Arrays.asList("begin the jogging",    "begin the jorc running",    "begin the jaw cutting",    "begin the jerking",    "begin the ga running",    "begin the georgia running",    "begin the ga name",    "begin the drawer cutting", "begin the door cutting", "begin the jorc cutting",    "begin the darkening",    "begin the shortening",    "begin the jork getting",
-                                                    "initiate the jogging", "initiate the jorc running", "initiate the jaw cutting", "initiate the jerking", "initiate the ga running", "initiate the georgia running", "initiate the ga name", "begin the drawer cutting", "begin the door cutting", "initiate the jorc cutting", "initiate the darkening", "initiate the shortening", "initiate the jork getting");
+        List<String> jorkeningBase = Arrays.asList(
+            "jogging", "jorc running", "jaw cutting", "jerking",
+            "ga running", "georgia running", "ga name",
+            "drawer cutting", "door cutting", "jorc cutting",
+            "darkening", "shortening", "jork getting",
+            "george running", "george getting",
+            "drug getting", "door getting", "door cunning",
+            "door to me"
+        );
+        List<String> jorkening = generatePhrasePrefixes(jorkeningBase, "begin the ", "initiate the ");
         List<String> theGame = Arrays.asList("lost the game");
         List<String> banter = new LinkedList<>();
         banter.addAll(jorkening);
@@ -112,6 +135,7 @@ public class IntentParser {
             parameterMap.put(Integer.toString(i), Arrays.asList(
                 "remind me in " + numberWord + " minutes",
                 "set a timer for " + numberWord + " minutes",
+                "set a timer " + numberWord + " minutes",
                 "countdown " + numberWord + " minutes"
             ));
         }

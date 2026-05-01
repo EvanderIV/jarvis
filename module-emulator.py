@@ -95,7 +95,7 @@ def emulate_satellite(server_ip, server_port, wav_path, node_id, amplitude):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="ESP32 Audio Satellite Emulator")
     parser.add_argument("--ip", type=str, default="127.0.0.1", help="Java server IP")
-    parser.add_argument("--port", type=int, default=4900, help="Java server UDP Port")
+    parser.add_argument("--port", type=int, default=3900, help="Java server UDP Port")
     parser.add_argument("--wav", type=str, required=True, help="Path to .wav file to stream")
     parser.add_argument("--node", type=str, default="test_laptop", help="Node ID (e.g., living_room)")
     parser.add_argument("--amp", type=float, default=-12.5, help="Simulated wake-word amplitude")

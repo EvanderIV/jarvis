@@ -191,7 +191,6 @@ public class CommandFulfiller {
             default:
                 return randFromArray(reponsesGeneric);
         }
-        
     }
 
     String randFromArray(String[] arr) {

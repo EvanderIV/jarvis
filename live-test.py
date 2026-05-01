@@ -178,7 +178,7 @@ def run_live_satellite(server_ip, server_port, node_id, model_path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Live ESP32 Satellite Emulator")
     parser.add_argument("--ip", type=str, default="127.0.0.1", help="Java server IP")
-    parser.add_argument("--port", type=int, default=4900, help="Java server UDP Port")
+    parser.add_argument("--port", type=int, default=3900, help="Java server UDP Port")
     parser.add_argument("--node", type=str, default="live_laptop", help="Node ID")
     parser.add_argument("--model", type=str, default="model", help="Path to local Vosk model folder")
 

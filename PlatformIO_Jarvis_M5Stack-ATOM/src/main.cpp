@@ -13,7 +13,7 @@ const bool DEBUG_OFFLINE_MODE = false;
 // --- NETWORK CONFIG ---
 const char* ssid = "Evan Moto Power";
 const char* password = "PromisedLAN";
-const char* server_ip = "eminich.com"; // <-- CHANGE THIS to your Java server's IP!
+const char* server_ip = "172.28.51.59";
 const int server_port = 3900;
 const char* node_id = "atom_echo_1";
 
@@ -28,6 +28,14 @@ WiFiUDP udp;
 #define SAMPLE_RATE 16000
 #define BUFFER_SIZE 1024
 uint8_t audio_buffer[BUFFER_SIZE];
+
+// --- PRE-ROLL BUFFER CONFIG ---
+// 16000Hz * 16-bit Mono = 32,000 bytes per second.
+// 32 chunks of 1024 bytes = ~1.024 seconds of historical audio context!
+const int PRE_ROLL_CHUNKS = 32; 
+uint8_t ring_buffer[PRE_ROLL_CHUNKS][BUFFER_SIZE];
+int ring_head = 0;
+int chunks_in_buffer = 0;
 
 // --- LED CONFIG ---
 #define LED_PIN 27
@@ -56,8 +64,8 @@ void setup_i2s() {
         .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
-        .dma_buf_count = 4,
-        .dma_buf_len = 512,
+        .dma_buf_count = 8,   // INCREASED: Gives the ESP32 more hardware headroom
+        .dma_buf_len = 1024,  // INCREASED: Prevents audio dropping while flushing the pre-roll
         .use_apll = false
     };
 
@@ -124,10 +132,70 @@ void setup() {
         }
         Serial.printf("\n[+] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
 
+        delay(500);
+
         // 3. Init UDP
         udp.begin(server_port);
     } else {
-        Serial.println("\n[!] RUNNING IN DEBUG_OFFLINE_MODE. Wi-Fi and UDP skipped.");
+        Serial.println("\n[!] RUNNING IN DEBUG_OFFLINE_MODE. Initializing network diagnostics...");
+        
+        // 1. Connect to Wi-Fi for diagnostics
+        Serial.printf("[*] Connecting to %s", ssid);
+        WiFi.begin(ssid, password);
+        while (WiFi.status() != WL_CONNECTED) {
+            delay(500);
+            Serial.print(".");
+        }
+        Serial.printf("\n[+] Connected! Local IP: %s\n", WiFi.localIP().toString().c_str());
+        
+        // 2. Test DNS Resolution
+        Serial.println("[DEBUG] Testing DNS Resolution...");
+        IPAddress resolved_ip;
+        if (WiFi.hostByName(server_ip, resolved_ip)) {
+            Serial.printf("[+] Successfully resolved '%s' to IP: %s\n", server_ip, resolved_ip.toString().c_str());
+        } else {
+            Serial.printf("[-] DNS ERROR: Could not resolve '%s'. Check domain name.\n", server_ip);
+        }
+        
+        // 3. Send Diagnostic UDP Ping
+        Serial.println("[DEBUG] Sending diagnostic ping (UDP Trigger) to server...");
+        udp.begin(server_port);
+        char json_payload[100];
+        snprintf(json_payload, sizeof(json_payload), "{\"node\":\"%s\",\"amplitude\":%.1f}", node_id, 999.9);
+        udp.beginPacket(server_ip, server_port);
+        udp.print(json_payload);
+        udp.endPacket();
+        
+        // 4. Wait for Java Server ACK
+        Serial.println("[DEBUG] Waiting 5 seconds for Java Server ACK...");
+        unsigned long start_wait = millis();
+        bool got_ack = false;
+        while (millis() - start_wait < 5000) {
+            int packetSize = udp.parsePacket();
+            if (packetSize) {
+                char ack_buffer[255];
+                int len = udp.read(ack_buffer, 255);
+                if (len > 0) ack_buffer[len] = '\0';
+                if (String(ack_buffer) == "ACK_START_STREAM") {
+                    got_ack = true;
+                    break;
+                }
+            }
+            delay(10);
+        }
+        
+        if (got_ack) {
+            Serial.println("[+] SUCCESS! Received ACK from Java server. Two-way communication is working.");
+        } else {
+            Serial.println("[-] FAILED: No response from Java server.");
+            Serial.println("    -> Is the Java server running?");
+            Serial.printf("    -> Is the server listening on port %d?\n", server_port);
+            Serial.println("    -> Are you blocking UDP traffic in your firewall?");
+            Serial.println("    -> Is NAT Hairpinning failing for your domain?");
+        }
+        
+        Serial.println("\n[!] Diagnostics complete. Halting.");
+        while(true) { delay(1000); } // Halt so it doesn't run the normal loop
     }
 
     // 2. Init Microphone
@@ -144,10 +212,20 @@ void loop() {
 
     double rms = get_rms(audio_buffer, bytes_read);
 
+    // --- PRE-ROLL MEMORY ---
+    // Constantly record the last ~1 second of audio so the start of the wake word isn't clipped
+    if (currentState == LISTENING || currentState == WAITING_ACK) {
+        memcpy(ring_buffer[ring_head], audio_buffer, BUFFER_SIZE);
+        ring_head = (ring_head + 1) % PRE_ROLL_CHUNKS;
+        if (chunks_in_buffer < PRE_ROLL_CHUNKS) {
+            chunks_in_buffer++;
+        }
+    }
+
     // --- LED VOLUME FEEDBACK ---
     // Map the volume (RMS) to LED brightness (10 to 255)
     // Assume silence is around SILENCE_THRESHOLD and loud talking hits ~1200
-    int brightness = map((long)rms, (long)SILENCE_THRESHOLD, 1200, 10, 255);
+    int brightness = map((long)rms, (long)SILENCE_THRESHOLD, 600, 10, 255);
     brightness = constrain(brightness, 10, 255);
     FastLED.setBrightness(brightness);
     FastLED.show();
@@ -181,6 +259,7 @@ void loop() {
             Serial.println("[DEBUG] Auto-ACKing arbitration for offline mode...");
             currentState = STREAMING;
             stream_start_time = millis();
+            chunks_in_buffer = 0; // Reset
             return;
         }
 
@@ -194,6 +273,20 @@ void loop() {
                 Serial.println("[+] Arbitration won! Streaming audio...");
                 currentState = STREAMING;
                 stream_start_time = millis();
+                
+                // Flush the ring buffer to the server so we don't miss the start of the word!
+                if (!DEBUG_OFFLINE_MODE) {
+                    Serial.printf("[+] Flushing %d chunks of pre-roll memory to server...\n", chunks_in_buffer);
+                    int tail = (ring_head - chunks_in_buffer + PRE_ROLL_CHUNKS) % PRE_ROLL_CHUNKS;
+                    for (int i = 0; i < chunks_in_buffer; i++) {
+                        int idx = (tail + i) % PRE_ROLL_CHUNKS;
+                        udp.beginPacket(server_ip, server_port);
+                        udp.write(ring_buffer[idx], BUFFER_SIZE);
+                        udp.endPacket();
+                        delay(1); // 1ms delay to let the ESP32 Wi-Fi stack clear its TX buffer without dropping packets
+                    }
+                }
+                chunks_in_buffer = 0; // Clear it for the next time
             }
         } else {
             // Time out quickly if no ACK received
@@ -242,6 +335,10 @@ void loop() {
             // Reset state
             currentState = LISTENING;
             silence_counter = 0;
+            chunks_in_buffer = 0; // Clear memory so we don't resend old EOF silence next time!
+            
+            // Briefly clear the I2S DMA buffer to avoid processing any hardware noise generated during the flash
+            i2s_zero_dma_buffer(I2S_NUM_0); 
             delay(500); // Debounce to prevent immediate re-trigger
         }
     }

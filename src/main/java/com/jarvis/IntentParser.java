@@ -4,6 +4,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.LinkedList;
 import java.util.Collections;
 
@@ -57,6 +59,133 @@ public class IntentParser {
         return tens[ten] + (one > 0 ? " " + ones[one] : "");
     }
 
+    /**
+     * Converts English number words to integers (e.g., "five" -> 5, "twenty three" -> 23)
+     * Used for fuzzy timer parsing when Vosk mishears the command
+     */
+    private Integer englishToNumber(String words) {
+        String[] ones = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
+        String[] teens = {"ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", 
+                         "sixteen", "seventeen", "eighteen", "nineteen"};
+        String[] tens = {"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"};
+        
+        words = words.toLowerCase().trim();
+        
+        // Try direct match for single words
+        for (int i = 0; i < ones.length; i++) {
+            if (words.equals(ones[i])) return i;
+        }
+        for (int i = 0; i < teens.length; i++) {
+            if (words.equals(teens[i])) return i + 10;
+        }
+        for (int i = 0; i < tens.length; i++) {
+            if (words.equals(tens[i])) return i * 10;
+        }
+        
+        // Try compound numbers like "twenty three"
+        String[] parts = words.split("\\s+");
+        if (parts.length == 2) {
+            Integer tenVal = null;
+            Integer oneVal = null;
+            
+            for (int i = 0; i < tens.length; i++) {
+                if (parts[0].equals(tens[i])) {
+                    tenVal = i * 10;
+                    break;
+                }
+            }
+            for (int i = 0; i < ones.length; i++) {
+                if (parts[1].equals(ones[i])) {
+                    oneVal = i;
+                    break;
+                }
+            }
+            if (tenVal != null && oneVal != null) {
+                return tenVal + oneVal;
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Attempts to extract a timer command from garbled/bad parses.
+     * Looks for number words followed by "minute" keywords even if the full phrase isn't recognized.
+     * E.g., "german for the time of five minute please" -> extracts "5"
+     */
+    private String extractTimerParameter(String normalizedText) {
+        String[] timeKeywords = {"minute", "minutes", "sec", "secs", "second", "seconds", "hour", "hours"};
+        String[] numberWords = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+                               "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", 
+                               "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty", 
+                               "sixty"};
+        
+        // Split text into words
+        String[] words = normalizedText.toLowerCase().split("\\s+");
+        
+        // Look for patterns: [number word/digit] + [time keyword]
+        for (int i = 0; i < words.length - 1; i++) {
+            String currentWord = words[i].replaceAll("[^a-z0-9]", ""); // Remove punctuation
+            String nextWord = words[i + 1].replaceAll("[^a-z0-9]", "");
+            
+            // Check if current word is a number or contains a digit
+            Integer num = null;
+            if (currentWord.matches("\\d+")) {
+                num = Integer.parseInt(currentWord);
+            } else {
+                num = englishToNumber(currentWord);
+            }
+            
+            // Check if next word is a time keyword
+            if (num != null && num > 0 && num <= 60) {
+                for (String keyword : timeKeywords) {
+                    if (nextWord.startsWith(keyword)) {
+                        return String.valueOf(num);
+                    }
+                }
+            }
+        }
+        
+        // Fallback: Also check if any number appears before a time keyword anywhere in the text
+        // This handles cases like "they were for five minutes" where there might be words between
+        String text = normalizedText.replaceAll("[^a-z0-9\\s]", "").toLowerCase();
+        Pattern numPattern = Pattern.compile("\\b(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty)\\b");
+        Matcher numMatcher = numPattern.matcher(text);
+        
+        Pattern timePattern = Pattern.compile("\\b(minute|minutes|sec|secs|second|seconds|hour|hours)\\b");
+        Matcher timeMatcher = timePattern.matcher(text);
+        
+        if (numMatcher.find() && timeMatcher.find()) {
+            // If a number appears before a time keyword, extract the first number found
+            String numStr = numMatcher.group(1);
+            Integer num = null;
+            if (numStr.matches("\\d+")) {
+                num = Integer.parseInt(numStr);
+            } else {
+                num = englishToNumber(numStr);
+            }
+            if (num != null && num > 0 && num <= 60) {
+                return String.valueOf(num);
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Detects if text is likely a timer command even with bad parses.
+     * Checks for timer/minute keywords and number patterns.
+     */
+    private boolean likelyTimerCommand(String normalizedText) {
+        String[] timerKeywords = {"timer", "countdown", "remind", "minute", "minutes", "second", "seconds", "hour", "hours"};
+        for (String keyword : timerKeywords) {
+            if (normalizedText.contains(" " + keyword)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public IntentParser() {
         // Map all the ways a user might phrase an action
         actionSynonyms.put(Action.TURN_ON, Arrays.asList("turn on", "enable", "start", "lights on", "activate", "turn it on", "turn that on", "turn that thing on"));
@@ -86,9 +215,10 @@ public class IntentParser {
             "darkening", "shortening", "jork getting",
             "george running", "george getting",
             "drug getting", "door getting", "door cunning",
-            "door to me"
+            "door to me", "door opening", "jorc opening", "jork opening",
+            "joking", "majorcan getting"
         );
-        List<String> jorkening = generatePhrasePrefixes(jorkeningBase, "begin the ", "initiate the ");
+        List<String> jorkening = generatePhrasePrefixes(jorkeningBase, "begin the ", "initiate the ", "begin ", "initiate ");
         List<String> theGame = Arrays.asList("lost the game");
         List<String> banter = new LinkedList<>();
         banter.addAll(jorkening);
@@ -200,9 +330,26 @@ public class IntentParser {
             foundTarget = Target.SPEAKER_ARRAY;
         }
 
+        // --- Fuzzy Timer Detection ---
+        // If text contains strong timer keywords, treat as timer command (overrides other actions)
+        if (likelyTimerCommand(normalizedText)) {
+            foundAction = Action.SET_TIMER;
+            // Try to extract the time parameter if we haven't already
+            if (foundParameter == null) {
+                foundParameter = extractTimerParameter(normalizedText);
+            }
+        } 
+        // If we found SET_TIMER but no parameter, try fuzzy extraction
+        else if (foundAction == Action.SET_TIMER && foundParameter == null) {
+            foundParameter = extractTimerParameter(normalizedText);
+        }
+
         // --- Context Resolution ---
+        // Some actions (SET_TIMER, UTILITY) are global and don't require a device target
+        boolean isGlobalAction = foundAction == Action.SET_TIMER || foundAction == Action.UTILITY;
+        
         // If we found an action but no explicit target, try to infer it from history
-        if (foundTarget == Target.UNKNOWN && foundAction != Action.UNKNOWN) {
+        if (foundTarget == Target.UNKNOWN && foundAction != Action.UNKNOWN && !isGlobalAction) {
             for (Target historicalTarget : targetHistory) {
                 List<Action> capabilities = targetCapabilities.getOrDefault(historicalTarget, Collections.emptyList());
                 if (capabilities.contains(foundAction)) {

@@ -105,18 +105,24 @@ public class UdpListener implements Runnable {
                         JsonObject jsonObject = gson.fromJson(resultJson, JsonObject.class);
                         String transcribedText = jsonObject.has("text") ? jsonObject.get("text").getAsString() : "";
 
-                        String cleanedText = transcribedText.replaceAll("(?i)\\b(jarvis |jervis |drivers |travis |garbage |harvest )\\b", "").trim();
+                        String jarvisRegex = "(?i)\\b(jarvis |jervis |drivers |travis |garbage |harvest |journalist |german |germans |jarred )\\b";
+                        String alternateWakeWordsRegex = "(?i)\\b(wake up daddy's home|wake up daddy home|we got daddy's home|we got daddy home|we've got daddy's home|we've got daddy home)\\b";
 
-                        System.out.println("[+] Vosk Transcription: " + cleanedText);
+                        String cleanedText = transcribedText.replaceAll(jarvisRegex, "").trim();
+
+                        System.out.println("[+] Vosk Transcription: " + transcribedText);
                         
-                        IntentParser parser = new IntentParser();
-                        ParsedCommand command = parser.parse(cleanedText);
-                        System.out.println("[+] Parsed Command: " + command);
-                        
-                        // Execute the command
-                        CommandFulfiller fulfiller = new CommandFulfiller();
-                        CommandFulfiller.CommandResult result = fulfiller.fulfill(command);
-                        System.out.println(result);
+                        // Detect jarvis wake word to execute command and parse intent)
+                        if (transcribedText.toLowerCase().matches(".*" + jarvisRegex + ".*") || transcribedText.toLowerCase().matches(".*" + alternateWakeWordsRegex + ".*")) {
+                            IntentParser parser = new IntentParser();
+                            ParsedCommand command = parser.parse(cleanedText);
+                            System.out.println("[+] Parsed Command: " + command);
+                            
+                            // Execute the command
+                            CommandFulfiller fulfiller = new CommandFulfiller();
+                            CommandFulfiller.CommandResult result = fulfiller.fulfill(command);
+                            System.out.println(result);
+                        }
                     }
                 }
                 

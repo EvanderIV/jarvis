@@ -1,8 +1,6 @@
 package com.jarvis;
 
 import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-
 import java.io.Reader;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,8 +12,8 @@ import java.util.stream.Collectors;
 
 public class MusicManager {
 
-    private final String MUSIC_DIR = "/home/evanm/Music/jarvis-music/";
-    private final String INDEX_FILE = "music.json"; // Placed in parent dir of MUSIC_DIR
+    private final String MUSIC_DIR = "/home/evanm/Music/jarvis-music/"; 
+    private final String INDEX_FILE = "music.json"; 
     
     // Snapcast default pipe. If you set up multiple streams later, you can parameterize this!
     private final String SNAPCAST_STREAM_ID = "House"; 
@@ -29,6 +27,12 @@ public class MusicManager {
     private final Random random = new Random();
 
     // --- Data Model for JSON Parsing ---
+    
+    // Wrapper class to match the {"music": [...]} root object structure
+    public static class LibraryRoot {
+        public List<Track> music;
+    }
+
     public static class Track {
         public String file;
         public String title;
@@ -47,16 +51,29 @@ public class MusicManager {
      * Reads the music.json file and populates the library memory.
      */
     private void loadLibrary() {
-        Path indexPath = Paths.get("/home/evanm/Music/", INDEX_FILE);
+        // Look for the JSON file
+        Path indexPath = Paths.get(MUSIC_DIR, INDEX_FILE);
+        
+        // Fallback to the parent Music folder if it isn't in jarvis-music
+        if (!Files.exists(indexPath)) {
+            indexPath = Paths.get("/home/evanm/Music/", INDEX_FILE);
+        }
+
         if (!Files.exists(indexPath)) {
             System.err.println("[-] Music Index not found at: " + indexPath.toString());
             return;
         }
 
         try (Reader reader = Files.newBufferedReader(indexPath)) {
-            java.lang.reflect.Type trackListType = new TypeToken<List<Track>>(){}.getType();
-            library = gson.fromJson(reader, trackListType);
-            System.out.println("[+] MusicManager: Loaded " + library.size() + " tracks from index.");
+            // Parse into the wrapper object instead of a direct List
+            LibraryRoot root = gson.fromJson(reader, LibraryRoot.class);
+            
+            if (root != null && root.music != null) {
+                library = root.music;
+                System.out.println("[+] MusicManager: Loaded " + library.size() + " tracks from index.");
+            } else {
+                System.err.println("[-] Failed to load music: The 'music' array is missing or empty in music.json");
+            }
         } catch (Exception e) {
             System.err.println("[-] Failed to load music index: " + e.getMessage());
         }
@@ -75,7 +92,7 @@ public class MusicManager {
         List<Track> matches = findTracks(parameter);
         if (matches.isEmpty()) {
             System.out.println("[-] No tracks found matching: " + parameter + ". Defaulting to random.");
-            matches = library; // Fallback to entire library if the genre isn't found
+            matches = library; // Fallback to entire library if the genre/mood isn't found
         }
 
         // 2. Pick a random track from the matches

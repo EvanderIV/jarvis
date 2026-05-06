@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 public class MusicManager {
 
     private final String MUSIC_DIR = "/home/evanm/Music/jarvis-music/";
-    private final String INDEX_FILE = "index.json"; // Placed in parent dir of MUSIC_DIR
+    private final String INDEX_FILE = "music.json"; // Placed in parent dir of MUSIC_DIR
     
     // Snapcast default pipe. If you set up multiple streams later, you can parameterize this!
     private final String SNAPCAST_STREAM_ID = "House"; 
@@ -44,7 +44,7 @@ public class MusicManager {
     }
 
     /**
-     * Reads the index.json file and populates the library memory.
+     * Reads the music.json file and populates the library memory.
      */
     private void loadLibrary() {
         Path indexPath = Paths.get("/home/evanm/Music/", INDEX_FILE);

@@ -187,7 +187,7 @@ public class CommandFulfiller {
         String response = generateBanterResponse(command.parameter);
         System.out.println("[+] " + response);
         
-        // If the banter parameter is an audio meme you have in the index.json, play it!
+        // If the banter parameter is an audio meme you have in the music.json, play it!
         if ("jorkening".equals(command.parameter) || "theGame".equals(command.parameter)) {
             System.out.println("[*] Triggering audio meme for: " + command.parameter);
             musicManager.playMusic(command.parameter, new ArrayList<>());

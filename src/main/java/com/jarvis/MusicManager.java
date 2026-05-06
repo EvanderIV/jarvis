@@ -6,7 +6,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.stream.Collectors;
 
@@ -15,7 +17,7 @@ public class MusicManager {
     private final String MUSIC_DIR = "/home/evanm/Music/jarvis-music/"; 
     private final String INDEX_FILE = "music.json"; 
     
-    // Snapcast default pipe. If you set up multiple streams later, you can parameterize this!
+    // Snapcast default pipe
     private final String SNAPCAST_STREAM_ID = "House"; 
     private final String SNAPCAST_PIPE_PATH = "/tmp/snapfifo"; 
 
@@ -23,12 +25,14 @@ public class MusicManager {
     private final Gson gson;
     private List<Track> library = new ArrayList<>();
     
+    // Theme translation dictionary
+    private final Map<String, String[]> themeMap = new HashMap<>();
+    
     private Process currentFfmpegProcess;
     private final Random random = new Random();
 
     // --- Data Model for JSON Parsing ---
     
-    // Wrapper class to match the {"music": [...]} root object structure
     public static class LibraryRoot {
         public List<Track> music;
     }
@@ -45,16 +49,42 @@ public class MusicManager {
         this.snapcast = snapcast;
         this.gson = new Gson();
         loadLibrary();
+        initializeThemes();
+    }
+
+    /**
+     * Translates conversational phrases into metadata tags found in music.json.
+     * Logic Prefixes:
+     * "+Tag" : Track MUST have this tag (AND)
+     * "-Tag" : Track MUST NOT have this tag (NOT)
+     * "Tag"  : Track should have this tag (OR - must match at least one un-prefixed tag if provided)
+     */
+    private void initializeThemes() {
+        // OR + NOT Logic: Can be Jazz, Piano, or Relaxed, but MUST NOT be a Wakeup track
+        themeMap.put("fancy_restaurant", new String[]{"Jazz", "Piano", "Relaxed", "-Wakeup"});
+        
+        // AND Logic: Track MUST be Happy AND MUST be Uplifting
+        themeMap.put("happy_adventure", new String[]{"+Happy", "+Uplifting"});
+        
+        // Mixed Logic: MUST be Focused, MUST NOT be Epic, and can be either Ambient or Repetitive
+        themeMap.put("study", new String[]{"+Focused", "-Epic", "Ambient", "Repetitive"});
+        
+        // Strict Exclusion: Workout tracks must be Upbeat, but exclude Somber/Relaxing ones
+        themeMap.put("workout", new String[]{"Upbeat", "Driven", "Epic", "Dance", "-Somber", "-Relaxing"});
+        
+        // Sleep music: MUST NOT be Wakeup/Upbeat, can be Somber or Relaxing
+        themeMap.put("sleep", new String[]{"Relaxing", "Somber", "-Wakeup", "-Upbeat", "-Tense"});
+        
+        // Generic Tavern: Mix of Folk and Celtic
+        themeMap.put("tavern", new String[]{"Folk", "Celtic"});
     }
 
     /**
      * Reads the music.json file and populates the library memory.
      */
     private void loadLibrary() {
-        // Look for the JSON file
         Path indexPath = Paths.get(MUSIC_DIR, INDEX_FILE);
         
-        // Fallback to the parent Music folder if it isn't in jarvis-music
         if (!Files.exists(indexPath)) {
             indexPath = Paths.get("/home/evanm/Music/", INDEX_FILE);
         }
@@ -65,7 +95,6 @@ public class MusicManager {
         }
 
         try (Reader reader = Files.newBufferedReader(indexPath)) {
-            // Parse into the wrapper object instead of a direct List
             LibraryRoot root = gson.fromJson(reader, LibraryRoot.class);
             
             if (root != null && root.music != null) {
@@ -92,7 +121,7 @@ public class MusicManager {
         List<Track> matches = findTracks(parameter);
         if (matches.isEmpty()) {
             System.out.println("[-] No tracks found matching: " + parameter + ". Defaulting to random.");
-            matches = library; // Fallback to entire library if the genre/mood isn't found
+            matches = library; 
         }
 
         // 2. Pick a random track from the matches
@@ -103,7 +132,7 @@ public class MusicManager {
 
         // 3. Route the Snapcast speakers to the correct stream
         snapcast.playStream(targetMacs, SNAPCAST_STREAM_ID);
-        snapcast.unmute(targetMacs); // Make sure they aren't muted!
+        snapcast.unmute(targetMacs); 
 
         // 4. Start ffmpeg to pump the audio into the Snapcast FIFO pipe
         startFfmpegStream(fullPath, SNAPCAST_PIPE_PATH);
@@ -120,34 +149,90 @@ public class MusicManager {
     }
 
     /**
-     * Filters the library based on genres, moods, or title.
+     * Filters the library based on mapped themes, genres, moods, or title.
      */
     private List<Track> findTracks(String query) {
         if (query == null || query.equalsIgnoreCase("default")) {
             return new ArrayList<>(library);
         }
 
-        String q = query.toLowerCase();
-        return library.stream().filter(t -> 
-            (t.genres != null && t.genres.stream().anyMatch(g -> g.toLowerCase().contains(q))) ||
-            (t.moods != null && t.moods.stream().anyMatch(m -> m.toLowerCase().contains(q))) ||
-            (t.title != null && t.title.toLowerCase().contains(q))
-        ).collect(Collectors.toList());
+        String lowerQuery = query.toLowerCase();
+
+        // 1. Check if the requested query is a known mapped theme
+        if (themeMap.containsKey(lowerQuery)) {
+            String[] targetTags = themeMap.get(lowerQuery);
+            return library.stream()
+                .filter(track -> evaluateLogicTags(track, targetTags))
+                .collect(Collectors.toList());
+        }
+
+        // 2. Otherwise, do a direct search (e.g. if the user explicitly asked for "Jazz" or a specific title)
+        return library.stream()
+            .filter(track -> matchesSingleKeyword(track, lowerQuery))
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Evaluates a track against a set of logic-prefixed tags (+ AND, - NOT, OR)
+     */
+    private boolean evaluateLogicTags(Track track, String[] targetTags) {
+        boolean hasOrConditions = false;
+        boolean matchedOrCondition = false;
+
+        for (String tag : targetTags) {
+            if (tag.startsWith("-")) {
+                // NOT condition (Must NOT have this tag)
+                String actualTag = tag.substring(1).toLowerCase();
+                if (matchesSingleKeyword(track, actualTag)) {
+                    return false; // Instantly reject track
+                }
+            } else if (tag.startsWith("+")) {
+                // AND condition (Must HAVE this tag)
+                String actualTag = tag.substring(1).toLowerCase();
+                if (!matchesSingleKeyword(track, actualTag)) {
+                    return false; // Instantly reject if missing
+                }
+            } else {
+                // OR condition (Should have this tag)
+                hasOrConditions = true;
+                if (matchesSingleKeyword(track, tag.toLowerCase())) {
+                    matchedOrCondition = true;
+                }
+            }
+        }
+
+        // If there were any standard OR conditions provided, the track MUST match at least one.
+        // If there were ONLY AND/NOT conditions, we bypass this check (hasOrConditions will be false).
+        if (hasOrConditions && !matchedOrCondition) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Core matching logic: checks genres, moods, and title against a single raw keyword.
+     */
+    private boolean matchesSingleKeyword(Track track, String keyword) {
+        if (track.genres != null && track.genres.stream().anyMatch(g -> g.toLowerCase().contains(keyword))) {
+            return true;
+        }
+        if (track.moods != null && track.moods.stream().anyMatch(m -> m.toLowerCase().contains(keyword))) {
+            return true;
+        }
+        if (track.title != null && track.title.toLowerCase().contains(keyword)) {
+            return true;
+        }
+        return false;
     }
 
     /**
      * Handles the low-level OS process of piping ffmpeg data to Snapcast.
      */
     private void startFfmpegStream(String filePath, String pipePath) {
-        // Kill any existing music first
         stopMusic();
 
         try {
-            // ffmpeg flags explained:
-            // -re : Read input at native frame rate (CRITICAL for streaming so we don't instantly flood the pipe)
-            // -i : Input file
-            // -f s16le -ar 48000 -ac 2 : Format to standard Snapcast raw PCM (16-bit, 48kHz, Stereo)
-            // -y : Overwrite output without asking
             ProcessBuilder pb = new ProcessBuilder(
                 "ffmpeg",
                 "-re",
@@ -159,7 +244,6 @@ public class MusicManager {
                 pipePath
             );
             
-            // Discard standard output/error so the Java buffers don't get clogged and crash the process
             pb.redirectError(ProcessBuilder.Redirect.DISCARD);
             pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
             

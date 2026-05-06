@@ -105,8 +105,26 @@ public class UdpListener implements Runnable {
                         JsonObject jsonObject = gson.fromJson(resultJson, JsonObject.class);
                         String transcribedText = jsonObject.has("text") ? jsonObject.get("text").getAsString() : "";
 
-                        String jarvisRegex = "(?i)\\b(jarvis |jervis |drivers |travis |garbage |harvest |journalist |german |germans |jarred )\\b";
-                        String alternateWakeWordsRegex = "(?i)\\b(wake up daddy's home|wake up daddy home|we got daddy's home|we got daddy home|we've got daddy's home|we've got daddy home)\\b";
+                        String[] jarvisPhonetics = {"jarvis", "jervis", "darvish", "drivers", "travis", "harvest", "journalist", "german", "germans", "jarred", "your this", "this"};
+
+                        String jarvisRegex = "(?i)\\b(";
+                        for (int i = 0; i < jarvisPhonetics.length - 1; i++) {
+                            jarvisRegex += jarvisPhonetics[i] + " |";
+                        }
+                        jarvisRegex += jarvisPhonetics[jarvisPhonetics.length - 1] + " )\\b";
+
+
+                        String[] prefixCommands = {"good morning", "good night", "goodnight"};
+
+                        String overrideEndCasesForCommands = "";
+                        for (int i = 0; i < jarvisPhonetics.length; i++) {
+                            for (String prefCmd : prefixCommands) {
+                                overrideEndCasesForCommands += prefCmd + " " + jarvisPhonetics[i] + "|";
+                            }
+                        }
+                        overrideEndCasesForCommands = overrideEndCasesForCommands.substring(0, overrideEndCasesForCommands.length() - 1); // Remove last '|'
+
+                        String alternateWakeWordsRegex = "(?i)\\b(wake up daddy's home|wake up daddy home|we got daddy's home|we got daddy home|we've got daddy's home|we've got daddy home|" + overrideEndCasesForCommands + ")\\b";
 
                         String cleanedText = transcribedText.replaceAll(jarvisRegex, "").trim();
 
@@ -119,7 +137,9 @@ public class UdpListener implements Runnable {
                             System.out.println("[+] Parsed Command: " + command);
                             
                             // Execute the command
-                            CommandFulfiller fulfiller = new CommandFulfiller();
+                            SnapcastController snapcast = new SnapcastController("eminich.com");
+                            MusicManager musicManager = new MusicManager(snapcast);
+                            CommandFulfiller fulfiller = new CommandFulfiller(musicManager, snapcast);
                             CommandFulfiller.CommandResult result = fulfiller.fulfill(command);
                             System.out.println(result);
                         }

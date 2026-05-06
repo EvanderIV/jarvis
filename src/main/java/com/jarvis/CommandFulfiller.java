@@ -2,6 +2,8 @@ package com.jarvis;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
@@ -15,7 +17,13 @@ public class CommandFulfiller {
 
     private final Map<Target, Map<Action, Boolean>> deviceCapabilities = new HashMap<>();
     
-    public CommandFulfiller() {
+    // Injected Controllers
+    private final MusicManager musicManager;
+    private final SnapcastController snapcast;
+    
+    public CommandFulfiller(MusicManager musicManager, SnapcastController snapcast) {
+        this.musicManager = musicManager;
+        this.snapcast = snapcast;
         initializeCapabilities();
     }
 
@@ -49,6 +57,7 @@ public class CommandFulfiller {
         speakers.put(Action.INCREASE_VOLUME, true);
         speakers.put(Action.DECREASE_VOLUME, true);
         speakers.put(Action.TURN_OFF, true);
+        speakers.put(Action.BANTER, true); // Added Banter explicitly here
         deviceCapabilities.put(Target.SPEAKER_ARRAY, speakers);
     }
 
@@ -114,21 +123,42 @@ public class CommandFulfiller {
     private CommandResult handleTurnOff(ParsedCommand command) {
         String message = String.format("Turning off %s", formatTargetName(command.target));
         System.out.println("[+] " + message);
-        // TODO: Send MQTT/HTTP command to device
+        
+        // Intercept speaker shutdowns to actually stop the music and mute the array
+        if (command.target == Target.SPEAKER_ARRAY) {
+            musicManager.stopMusic();
+            List<String> targetMacs = new ArrayList<>(); // Empty list applies to all speakers
+            snapcast.mute(targetMacs);
+            message = "Music stopped and speakers muted.";
+        } else {
+            // TODO: Send MQTT/HTTP command to smart plugs/lights
+        }
+        
         return new CommandResult(true, message);
     }
 
     private CommandResult handleIncreaseVolume(ParsedCommand command) {
         String message = String.format("Increasing volume on %s", formatTargetName(command.target));
         System.out.println("[+] " + message);
-        // TODO: Send MQTT/HTTP command to device
+        
+        if (command.target == Target.SPEAKER_ARRAY) {
+            // Note: To cleanly increment volume, you'd track state locally or query Snapcast.
+            // For now, we will just set it to a static "loud" volume.
+            snapcast.setVolume(new ArrayList<>(), 75);
+        }
+        
         return new CommandResult(true, message);
     }
 
     private CommandResult handleDecreaseVolume(ParsedCommand command) {
         String message = String.format("Decreasing volume on %s", formatTargetName(command.target));
         System.out.println("[+] " + message);
-        // TODO: Send MQTT/HTTP command to device
+        
+        if (command.target == Target.SPEAKER_ARRAY) {
+            // Note: Same as above. Hardcoded to a "quiet" state for now.
+            snapcast.setVolume(new ArrayList<>(), 25);
+        }
+        
         return new CommandResult(true, message);
     }
 
@@ -136,7 +166,12 @@ public class CommandFulfiller {
         String genre = command.parameter != null ? command.parameter : "default";
         String message = String.format("Playing %s music on %s", genre, formatTargetName(command.target));
         System.out.println("[+] " + message);
-        // TODO: Send MQTT/HTTP command to device or music streaming service
+        
+        // Pass an empty list to target ALL registered speakers.
+        // If you map specific Target enums to MACs later, you'd populate this list!
+        List<String> targetMacs = new ArrayList<>();
+        musicManager.playMusic(genre, targetMacs);
+        
         return new CommandResult(true, message);
     }
 
@@ -151,6 +186,13 @@ public class CommandFulfiller {
     private CommandResult handleBanter(ParsedCommand command) {
         String response = generateBanterResponse(command.parameter);
         System.out.println("[+] " + response);
+        
+        // If the banter parameter is an audio meme you have in the index.json, play it!
+        if ("jorkening".equals(command.parameter) || "theGame".equals(command.parameter)) {
+            System.out.println("[*] Triggering audio meme for: " + command.parameter);
+            musicManager.playMusic(command.parameter, new ArrayList<>());
+        }
+        
         return new CommandResult(true, response);
     }
 

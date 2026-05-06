@@ -11,9 +11,9 @@
 const bool DEBUG_OFFLINE_MODE = false;
 
 // --- NETWORK CONFIG ---
-const char* ssid = "Evan Moto Power";
-const char* password = "PromisedLAN";
-const char* server_ip = "172.28.51.59";
+const char* ssid = "ArchMinichs";
+const char* password = "Sh33pAndL!nuxBoys";
+const char* server_ip = "eminich.com";
 const int server_port = 3900;
 const char* node_id = "atom_echo_1";
 
@@ -28,6 +28,7 @@ WiFiUDP udp;
 #define SAMPLE_RATE 16000
 #define BUFFER_SIZE 1024
 uint8_t audio_buffer[BUFFER_SIZE];
+const float MIC_GAIN = 1.5;
 
 // --- PRE-ROLL BUFFER CONFIG ---
 // 16000Hz * 16-bit Mono = 32,000 bytes per second.
@@ -108,7 +109,7 @@ void flash_eof_led() {
     
     // Restore default dim blue glow
     leds[0] = CRGB(0, 150, 255);
-    FastLED.setBrightness(10);
+    FastLED.setBrightness(5);
     FastLED.show();
 }
 
@@ -116,10 +117,15 @@ void setup() {
     Serial.begin(115200);
     delay(1000);
 
+    // --- THERMAL MANAGEMENT ---
+    // Downclock CPU from 240MHz to 80MHz to drastically reduce heat and power draw
+    setCpuFrequencyMhz(80); 
+    Serial.printf("[*] CPU Frequency set to: %d MHz\n", getCpuFrequencyMhz());
+
     // 0. Init LED
     FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
     leds[0] = CRGB(0, 150, 255); // Cool cyber blue
-    FastLED.setBrightness(10);   // Default dim glow
+    FastLED.setBrightness(5);   // Default dim glow
     FastLED.show();
 
     if (!DEBUG_OFFLINE_MODE) {
@@ -131,6 +137,12 @@ void setup() {
             Serial.print(".");
         }
         Serial.printf("\n[+] Connected! IP: %s\n", WiFi.localIP().toString().c_str());
+
+        // --- THERMAL MANAGEMENT 2 ---
+        // Reduce Wi-Fi TX power from default ~19.5dBm to 8.5dBm. 
+        // This is perfectly fine for indoor apartment range and drastically lowers LDO heat.
+        WiFi.setTxPower(WIFI_POWER_8_5dBm);
+        Serial.println("[*] Wi-Fi TX Power throttled to 8.5dBm to reduce heat.");
 
         delay(500);
 
@@ -204,13 +216,29 @@ void setup() {
     Serial.println("[+] Satellite is LIVE. Listening for noise...");
 }
 
+void apply_gain(uint8_t* buffer, size_t bytes_read) {
+  int16_t* samples = (int16_t*)buffer;
+  int num_samples = bytes_read / 2;
+
+  for (int i = 0; i < num_samples; i++) {
+    int32_t amplified = (int32_t)(samples[i] * MIC_GAIN);
+
+    if (amplified > 32767) amplified = 32767;
+    if (amplified < -32768) amplified = -32768;
+
+    samples[i] = (int16_t)amplified;
+  }
+}
+
 void loop() {
     size_t bytes_read;
     i2s_read(I2S_NUM_0, &audio_buffer, BUFFER_SIZE, &bytes_read, portMAX_DELAY);
     
     if (bytes_read == 0) return;
 
-    double rms = get_rms(audio_buffer, bytes_read);
+    apply_gain(audio_buffer, bytes_read);
+
+    double rms = get_rms(audio_buffer, bytes_read) / MIC_GAIN;
 
     // --- PRE-ROLL MEMORY ---
     // Constantly record the last ~1 second of audio so the start of the wake word isn't clipped
@@ -224,9 +252,9 @@ void loop() {
 
     // --- LED VOLUME FEEDBACK ---
     // Map the volume (RMS) to LED brightness (10 to 255)
-    // Assume silence is around SILENCE_THRESHOLD and loud talking hits ~1200
-    int brightness = map((long)rms, (long)SILENCE_THRESHOLD, 600, 10, 255);
-    brightness = constrain(brightness, 10, 255);
+    // Assume silence is around SILENCE_THRESHOLD and loud talking hits ~600
+    int brightness = map((long)rms, (long)SILENCE_THRESHOLD, 600, 5, 255);
+    brightness = constrain(brightness, 5, 255);
     FastLED.setBrightness(brightness);
     FastLED.show();
 

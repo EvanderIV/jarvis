@@ -137,7 +137,7 @@ public class UdpListener implements Runnable {
                             System.out.println("[+] Parsed Command: " + command);
                             
                             // Execute the command
-                            SnapcastController snapcast = new SnapcastController("eminich.com");
+                            SnapcastController snapcast = new SnapcastController("127.0.0.1");
                             MusicManager musicManager = new MusicManager(snapcast);
                             CommandFulfiller fulfiller = new CommandFulfiller(musicManager, snapcast);
                             CommandFulfiller.CommandResult result = fulfiller.fulfill(command);

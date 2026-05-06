@@ -26,7 +26,7 @@ public class MusicManager {
     private List<Track> library = new ArrayList<>();
     
     // Theme translation dictionary
-    private final Map<String, String[]> themeMap = new HashMap<>();
+    private final Map<String, ThemeDefinition> themeMap = new HashMap<>();
     
     private Process currentFfmpegProcess;
     private final Random random = new Random();
@@ -45,6 +45,19 @@ public class MusicManager {
         public int speed;
     }
 
+    // Inner class to bind logic tags with allowed speed ranges
+    public static class ThemeDefinition {
+        public final String[] tags;
+        public final int minSpeed;
+        public final int maxSpeed;
+
+        public ThemeDefinition(String[] tags, int minSpeed, int maxSpeed) {
+            this.tags = tags;
+            this.minSpeed = minSpeed;
+            this.maxSpeed = maxSpeed;
+        }
+    }
+
     public MusicManager(SnapcastController snapcast) {
         this.snapcast = snapcast;
         this.gson = new Gson();
@@ -60,23 +73,32 @@ public class MusicManager {
      * "Tag"  : Track should have this tag (OR - must match at least one un-prefixed tag if provided)
      */
     private void initializeThemes() {
-        // OR + NOT Logic: Can be Jazz, Piano, or Relaxed, but MUST NOT be a Wakeup track
-        themeMap.put("fancy_restaurant", new String[]{"Jazz", "Piano", "Relaxed", "-Wakeup"});
+        // --- Exact Genre Translations ---
+        themeMap.put("jazz",       new ThemeDefinition(new String[]{"Jazz"}, 0, 4));
+        themeMap.put("classical",  new ThemeDefinition(new String[]{"Orchestral", "Piano"}, 0, 3));
+        themeMap.put("electronic", new ThemeDefinition(new String[]{"Electronic"}, 1, 4));
+        themeMap.put("rock",       new ThemeDefinition(new String[]{"Rock"}, 2, 4));
+        themeMap.put("ambient",    new ThemeDefinition(new String[]{"Ambient"}, 0, 2));
+        themeMap.put("country",    new ThemeDefinition(new String[]{"Country", "Folk"}, 1, 4)); // Folk is heavily represented in your JSON
         
-        // AND Logic: Track MUST be Happy AND MUST be Uplifting
-        themeMap.put("happy_adventure", new String[]{"+Happy", "+Uplifting"});
+        // Funk/Hip Hop don't strictly exist in your JSON yet, but we'll set up the logic 
+        // to catch them when added, or fall back to upbeat rhythmic tracks.
+        themeMap.put("funk",       new ThemeDefinition(new String[]{"Funk", "Groove", "Jazz", "+Upbeat"}, 2, 4));
+        themeMap.put("hip hop",    new ThemeDefinition(new String[]{"Hip Hop", "Rap", "Beat"}, 2, 4));
+
+        // --- Vibe / Mood Translations (Using Logic & Speed) ---
         
-        // Mixed Logic: MUST be Focused, MUST NOT be Epic, and can be either Ambient or Repetitive
-        themeMap.put("study", new String[]{"+Focused", "-Epic", "Ambient", "Repetitive"});
+        // "active": Energetic, workout, pump up (Must avoid chill vibes, High Speed)
+        themeMap.put("active",     new ThemeDefinition(new String[]{"Upbeat", "Driven", "Epic", "-Somber", "-Relaxing"}, 3, 4));
         
-        // Strict Exclusion: Workout tracks must be Upbeat, but exclude Somber/Relaxing ones
-        themeMap.put("workout", new String[]{"Upbeat", "Driven", "Epic", "Dance", "-Somber", "-Relaxing"});
+        // "lofi": Chill, study, peaceful (Must be background friendly, Low Speed)
+        themeMap.put("lofi",       new ThemeDefinition(new String[]{"Relaxing", "Focused", "Ambient", "-Tense", "-Epic", "-Driven"}, 0, 2));
         
-        // Sleep music: MUST NOT be Wakeup/Upbeat, can be Somber or Relaxing
-        themeMap.put("sleep", new String[]{"Relaxing", "Somber", "-Wakeup", "-Upbeat", "-Tense"});
+        // "wakeup": Morning music (Use the explicit Wakeup tag or generally happy tracks, Mid-High Speed)
+        themeMap.put("wakeup",     new ThemeDefinition(new String[]{"Wakeup", "Happy", "Upbeat", "Uplifting", "-Somber"}, 2, 3));
         
-        // Generic Tavern: Mix of Folk and Celtic
-        themeMap.put("tavern", new String[]{"Folk", "Celtic"});
+        // "fancy_restaurant": Dinner/elegant music (Smooth, unobtrusive, Low Speed)
+        themeMap.put("fancy_restaurant", new ThemeDefinition(new String[]{"Jazz", "Piano", "Relaxing", "-Epic", "-Tense", "-Driven", "-Wakeup", "-Upbeat", "-Somber"}, 0, 2));
     }
 
     /**
@@ -160,9 +182,10 @@ public class MusicManager {
 
         // 1. Check if the requested query is a known mapped theme
         if (themeMap.containsKey(lowerQuery)) {
-            String[] targetTags = themeMap.get(lowerQuery);
+            ThemeDefinition theme = themeMap.get(lowerQuery);
             return library.stream()
-                .filter(track -> evaluateLogicTags(track, targetTags))
+                .filter(track -> track.speed >= theme.minSpeed && track.speed <= theme.maxSpeed)
+                .filter(track -> evaluateLogicTags(track, theme.tags))
                 .collect(Collectors.toList());
         }
 

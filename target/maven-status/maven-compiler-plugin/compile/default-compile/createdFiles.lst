@@ -8,6 +8,7 @@ com\jarvis\ParsedCommand$Target.class
 com\jarvis\CommandFulfiller.class
 com\jarvis\CommandUnfulfillableException.class
 com\jarvis\IntentParser.class
+com\jarvis\MusicManager$ThemeDefinition.class
 com\jarvis\CommandFulfiller$CommandResult.class
 com\jarvis\ParsedCommand.class
 com\jarvis\CommandFulfiller$1.class

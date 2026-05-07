@@ -15,6 +15,7 @@ import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +26,9 @@ public class LmsController {
     private final HttpClient httpClient;
     private final Gson gson;
     private int requestId = 1;
+    
+    // Security credentials
+    private String authHeader = null;
 
     // --- Security & Config ---
     private final Map<String, String> registeredSpeakers = new ConcurrentHashMap<>();
@@ -32,15 +36,26 @@ public class LmsController {
 
     /**
      * Initializes the controller for Logitech Media Server.
-     * @param serverIp The IP address of your Linux machine running LMS (e.g., "127.0.0.1" or "192.168.1.50")
+     * Pulls authentication securely from the LMS_AUTH environment variable.
      */
     public LmsController(String serverIp) {
-        // LMS hosts its JSON-RPC API on port 9000 at the /jsonrpc.js endpoint
         this.rpcUrl = "http://" + serverIp + ":9000/jsonrpc.js";
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(3))
                 .build();
         this.gson = new Gson();
+        
+        // Fetch credentials from the OS environment variables
+        String authEnv = System.getenv("LMS_AUTH");
+        
+        if (authEnv != null && !authEnv.trim().isEmpty()) {
+            // Basic Auth expects the exact format "username:password" encoded in Base64
+            String encoded = Base64.getEncoder().encodeToString(authEnv.trim().getBytes());
+            this.authHeader = "Basic " + encoded;
+            System.out.println("[+] Security: Loaded LMS credentials from environment.");
+        } else {
+            System.err.println("[-] Security Warning: LMS_AUTH environment variable is missing or empty.");
+        }
         
         loadConfig();
     }
@@ -63,11 +78,6 @@ public class LmsController {
         }
     }
 
-    /**
-     * Sets the volume for the specified speakers.
-     * @param targetMacs List of MAC addresses. If null or empty, applies to ALL speakers.
-     * @param volumePercent Integer from 0 to 100.
-     */
     public void setVolume(List<String> targetMacs, int volumePercent) {
         List<String> clients = resolveTargets(targetMacs);
         int clampedVolume = Math.max(0, Math.min(100, volumePercent));
@@ -78,16 +88,10 @@ public class LmsController {
         }
     }
 
-    /**
-     * Instructs LMS to stream a specific audio file directly to the speakers.
-     * @param targetMacs List of MAC addresses. If null or empty, applies to ALL speakers.
-     * @param absoluteFilePath The absolute path to the .mp3/.flac file on the Linux server.
-     */
     public void playFile(List<String> targetMacs, String absoluteFilePath) {
         List<String> clients = resolveTargets(targetMacs);
         
         for (String mac : clients) {
-            // "playlist play <file>" replaces the current queue and plays the file instantly
             sendRpcRequest(mac, Arrays.asList("playlist", "play", absoluteFilePath));
             System.out.println("[*] LMS: Instructed " + mac + " to play '" + absoluteFilePath + "'");
         }
@@ -196,13 +200,8 @@ public class LmsController {
         return validTargets;
     }
 
-    /**
-     * Queries LMS for all currently connected speakers (players).
-     */
     private List<String> getAllClientIds() {
         List<String> allMacs = new ArrayList<>();
-        
-        // "-" is the wildcard player ID used to query server-wide status
         JsonObject response = sendRpcRequest("-", Arrays.asList("serverstatus", "0", "99"));
         
         if (response != null && response.has("result")) {
@@ -219,14 +218,13 @@ public class LmsController {
     }
 
     /**
-     * Sends a command to the LMS JSON-RPC API using the "slim.request" protocol.
+     * Sends an authenticated command to the LMS JSON-RPC API.
      */
     private JsonObject sendRpcRequest(String playerId, List<String> commandArgs) {
         JsonObject payload = new JsonObject();
         payload.addProperty("id", requestId++);
         payload.addProperty("method", "slim.request");
 
-        // The params array looks like: [ "player_mac", [ "command", "arg1" ] ]
         JsonArray params = new JsonArray();
         params.add(playerId == null ? "-" : playerId);
         
@@ -235,21 +233,34 @@ public class LmsController {
             cmdArray.add(arg);
         }
         params.add(cmdArray);
-        
         payload.add("params", params);
 
         try {
-            HttpRequest request = HttpRequest.newBuilder()
+            HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(rpcUrl))
-                    .header("Content-Type", "application/json")
+                    .header("Content-Type", "application/json");
+
+            // Inject the Authorization header if we have credentials
+            if (authHeader != null) {
+                requestBuilder.header("Authorization", authHeader);
+            }
+
+            HttpRequest request = requestBuilder
                     .POST(HttpRequest.BodyPublishers.ofString(gson.toJson(payload)))
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            
+            // Catch 401 Unauthorized before Gson tries to parse it
+            if (response.statusCode() == 401) {
+                System.err.println("[-] LMS RPC Error: 401 Unauthorized. Check your username and password!");
+                return null;
+            }
+
             return gson.fromJson(response.body(), JsonObject.class);
             
         } catch (Exception e) {
-            System.err.println("[-] LMS RPC Error: " + e.getMessage());
+            System.err.println("[-] LMS RPC Error: " + e.toString());
             return null;
         }
     }

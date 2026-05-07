@@ -109,7 +109,7 @@ public class UdpListener implements Runnable {
                             JsonObject jsonObject = gson.fromJson(resultJson, JsonObject.class);
                             String transcribedText = jsonObject.has("text") ? jsonObject.get("text").getAsString() : "";
 
-                            String[] jarvisPhonetics = {"jarvis", "jervis", "darvish", "garbage", "drivers", "travis", "harvest", "journalist", "german", "germans", "jarred", "your this", "this", "jerks"};
+                            String[] jarvisPhonetics = {"jarvis", "jervis", "darvish", "garbage", "jurgen", "drivers", "travis", "harvest", "journalist", "german", "germans", "jarred", "your this", "this", "jerks"};
 
                             String jarvisRegex = "(?i)\\b(";
                             for (int i = 0; i < jarvisPhonetics.length - 1; i++) {

@@ -316,7 +316,10 @@ public class IntentParser {
                 .replaceAll("please show music", "play some music")
                 .replaceAll("play acted music", "play active music")
                 .replaceAll("play acted music", "they active music")
-                .replaceAll("question music", "they active music");
+                .replaceAll("question music", "they active music")
+                .replaceAll("kill music", "kill the music")
+                .replaceAll("still the music", "kill the music")
+                .replaceAll("killed the music", "kill the music");
 
         Action foundAction = Action.UNKNOWN;
         Target foundTarget = Target.UNKNOWN;

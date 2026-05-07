@@ -27,7 +27,7 @@ public class LmsController {
     private final HttpClient httpClient;
     private final Gson gson;
     private int requestId = 1;
-    
+
     // Security credentials
     private String authHeader = null;
 
@@ -45,10 +45,10 @@ public class LmsController {
                 .connectTimeout(Duration.ofSeconds(3))
                 .build();
         this.gson = new Gson();
-        
+
         // Fetch credentials from the OS environment variables
         String authEnv = System.getenv("LMS_AUTH");
-        
+
         if (authEnv != null && !authEnv.trim().isEmpty()) {
             // Basic Auth expects the exact format "username:password" encoded in Base64
             String encoded = Base64.getEncoder().encodeToString(authEnv.trim().getBytes());
@@ -57,7 +57,7 @@ public class LmsController {
         } else {
             System.err.println("[-] Security Warning: LMS_AUTH environment variable is missing or empty.");
         }
-        
+
         loadConfig();
     }
 
@@ -82,16 +82,36 @@ public class LmsController {
     public void setVolume(List<String> targetMacs, int volumePercent) {
         List<String> clients = resolveTargets(targetMacs);
         int clampedVolume = Math.max(0, Math.min(100, volumePercent));
-        
+
         for (String mac : clients) {
             sendRpcRequest(mac, Arrays.asList("mixer", "volume", String.valueOf(clampedVolume)));
             System.out.println("[*] LMS: Set volume of " + mac + " to " + clampedVolume + "%");
         }
     }
 
+    /**
+     * Gets the current volume percentage of a player.
+     * Returns -1 if unable to retrieve.
+     */
+    public int getVolume(String playerId) {
+        JsonObject response = sendRpcRequest(playerId, Arrays.asList("mixer", "volume", "?"));
+
+        if (response != null && response.has("result")) {
+            JsonObject result = response.getAsJsonObject("result");
+            if (result.has("_volume")) {
+                try {
+                    return Integer.parseInt(result.get("_volume").getAsString());
+                } catch (Exception e) {
+                    System.err.println("[-] Failed to parse volume: " + e.getMessage());
+                }
+            }
+        }
+        return -1;
+    }
+
     public void playFile(List<String> targetMacs, String absoluteFilePath) {
         List<String> clients = resolveTargets(targetMacs);
-        
+
         for (String mac : clients) {
             sendRpcRequest(mac, Arrays.asList("playlist", "play", absoluteFilePath));
             System.out.println("[*] LMS: Instructed " + mac + " to play '" + absoluteFilePath + "'");
@@ -105,12 +125,14 @@ public class LmsController {
             Path path = Paths.get(CONFIG_FILE);
             if (Files.exists(path)) {
                 String json = Files.readString(path);
-                java.lang.reflect.Type type = new TypeToken<Map<String, String>>(){}.getType();
+                java.lang.reflect.Type type = new TypeToken<Map<String, String>>() {
+                }.getType();
                 Map<String, String> loaded = gson.fromJson(json, type);
                 if (loaded != null) {
                     registeredSpeakers.putAll(loaded);
                 }
-                System.out.println("[+] Security: Loaded " + registeredSpeakers.size() + " registered speakers from config.");
+                System.out.println(
+                        "[+] Security: Loaded " + registeredSpeakers.size() + " registered speakers from config.");
             }
         } catch (Exception e) {
             System.err.println("[-] Failed to load speakers config: " + e.getMessage());
@@ -169,12 +191,13 @@ public class LmsController {
 
     /**
      * Gets the current playback status of a player.
-     * Returns a map containing playback info: "isPlaying", "currentFile", "duration", "time", etc.
+     * Returns a map containing playback info: "isPlaying", "currentFile",
+     * "duration", "time", etc.
      */
     public Map<String, Object> getPlaybackStatus(String playerId) {
         Map<String, Object> status = new HashMap<>();
         JsonObject response = sendRpcRequest(playerId, Arrays.asList("status"));
-        
+
         if (response != null && response.has("result")) {
             JsonObject result = response.getAsJsonObject("result");
             status.put("isPlaying", result.has("can_seek") && !result.get("mode").getAsString().equals("stop"));
@@ -187,7 +210,7 @@ public class LmsController {
                 status.put("time", result.get("time").getAsDouble());
             }
         }
-        
+
         return status;
     }
 
@@ -203,7 +226,7 @@ public class LmsController {
     private void setMuteState(List<String> targetMacs, boolean isMuted) {
         List<String> clients = resolveTargets(targetMacs);
         String muteState = isMuted ? "1" : "0";
-        
+
         for (String mac : clients) {
             sendRpcRequest(mac, Arrays.asList("mixer", "muting", muteState));
             System.out.println("[*] LMS: Muted state for " + mac + " set to " + isMuted);
@@ -212,7 +235,7 @@ public class LmsController {
 
     private List<String> resolveTargets(List<String> targetMacs) {
         List<String> validTargets = new ArrayList<>();
-        
+
         if (targetMacs == null || targetMacs.isEmpty()) {
             List<String> allConnected = getAllClientIds();
             for (String mac : allConnected) {
@@ -235,7 +258,7 @@ public class LmsController {
     private List<String> getAllClientIds() {
         List<String> allMacs = new ArrayList<>();
         JsonObject response = sendRpcRequest("-", Arrays.asList("serverstatus", "0", "99"));
-        
+
         if (response != null && response.has("result")) {
             JsonObject result = response.getAsJsonObject("result");
             if (result.has("players_loop")) {
@@ -259,7 +282,7 @@ public class LmsController {
 
         JsonArray params = new JsonArray();
         params.add(playerId == null ? "-" : playerId);
-        
+
         JsonArray cmdArray = new JsonArray();
         for (String arg : commandArgs) {
             cmdArray.add(arg);
@@ -282,7 +305,7 @@ public class LmsController {
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            
+
             // Catch 401 Unauthorized before Gson tries to parse it
             if (response.statusCode() == 401) {
                 System.err.println("[-] LMS RPC Error: 401 Unauthorized. Check your username and password!");
@@ -290,7 +313,7 @@ public class LmsController {
             }
 
             return gson.fromJson(response.body(), JsonObject.class);
-            
+
         } catch (Exception e) {
             System.err.println("[-] LMS RPC Error: " + e.toString());
             return null;

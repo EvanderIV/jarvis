@@ -6,6 +6,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -36,6 +37,9 @@ public class MusicManager {
     private String currentlyPlayingFile = null;
     private long lastTrackStartTime = 0;
     private float currentTrackFadeoutTimestamp = -1; // Fadeout point for current track, or -1 if none detected
+
+    // Volume tracking for mute/unmute restore
+    private final Map<String, Integer> savedVolumes = new HashMap<>();
 
     private Thread playbackMonitorThread = null;
     private volatile boolean isContinuousPlayEnabled = false;
@@ -234,6 +238,16 @@ public class MusicManager {
         currentTrackFadeoutTimestamp = -1; // Mark as "not yet analyzed"
 
         lmsController.unmute(targetMacs);
+
+        // Restore saved volume for each speaker
+        for (String mac : targetMacs) {
+            if (savedVolumes.containsKey(mac)) {
+                int savedVolume = savedVolumes.get(mac);
+                lmsController.setVolume(Arrays.asList(mac), savedVolume);
+                System.out.println("[*] MusicManager: Restored volume " + savedVolume + "% for " + mac);
+            }
+        }
+
         lmsController.playFile(targetMacs, fullPath);
 
         // 7. Analyze audio for fadeout detection IN BACKGROUND (with automatic MP3
@@ -413,6 +427,19 @@ public class MusicManager {
      */
     public void stopMusic() {
         System.out.println("[*] MusicManager: Stopping playback and disabling continuous mode.");
+
+        // Save the current volume from all target speakers before stopping
+        List<String> speakersToCheck = targetMacs;
+        if (speakersToCheck.isEmpty()) {
+            speakersToCheck = lmsController.getAllRegisteredSpeakers();
+        }
+        for (String mac : speakersToCheck) {
+            int volume = lmsController.getVolume(mac);
+            if (volume >= 0) {
+                savedVolumes.put(mac, volume);
+                System.out.println("[*] MusicManager: Saved volume " + volume + "% for " + mac);
+            }
+        }
 
         // Disable continuous playback
         isContinuousPlayEnabled = false;

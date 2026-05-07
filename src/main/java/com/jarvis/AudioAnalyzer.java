@@ -16,7 +16,7 @@ import java.util.List;
 public class AudioAnalyzer {
     
     // Configuration constants
-    private static final float LOW_VOLUME_RATIO = 0.15f;      // Skip if volume drops below 15% of average
+    private static final float LOW_VOLUME_RATIO = 0.05f;      // Skip if volume drops below 5% of average
     private static final float FADEOUT_ANALYSIS_WINDOW_SECONDS = 8.0f; // Only analyze the last 8 seconds of the song
     private static final int SAMPLE_BUFFER_SIZE = 4096;        // Number of bytes to read at a time
     

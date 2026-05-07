@@ -446,6 +446,9 @@ public class AudioAnalyzer {
      * for a sustained period.
      * Requires at least 2 seconds of continuous low volume to be considered a
      * fadeout.
+     * 
+     * NOTE: Skips the first ~1 second of the analysis window to avoid false
+     * positives from FFmpeg conversion artifacts or natural quiet transitions.
      */
     private static int findFadeoutPoint(List<Float> volumeLevels, float volumeThreshold,
             float analysisStartSeconds, float sampleRate) {
@@ -458,6 +461,10 @@ public class AudioAnalyzer {
         // Require 2 seconds of low volume out of the 8-second analysis window
         int samplesNeededForSustained = Math.max(1,
                 (int) (volumeLevels.size() * SUSTAINED_LOW_VOLUME_DURATION / FADEOUT_ANALYSIS_WINDOW_SECONDS));
+
+        // Skip the first ~1 second of the analysis window to avoid edge effects
+        int startSearchIndex = Math.max(0, (int) (volumeLevels.size() / 8)); // Start at ~1 second into the window
+
         int consecutiveLowVolumeSamples = 0;
         int fadeoutStartIndex = -1;
 
@@ -467,10 +474,13 @@ public class AudioAnalyzer {
                     " (~"
                     + String.format("%.1f",
                             samplesNeededForSustained * FADEOUT_ANALYSIS_WINDOW_SECONDS / volumeLevels.size())
-                    + " seconds)");
+                    + " seconds), startSearchIndex=" + startSearchIndex +
+                    " (~"
+                    + String.format("%.1f", startSearchIndex * FADEOUT_ANALYSIS_WINDOW_SECONDS / volumeLevels.size())
+                    + "s into window)");
         }
 
-        for (int i = 0; i < volumeLevels.size(); i++) {
+        for (int i = startSearchIndex; i < volumeLevels.size(); i++) {
             float rollingAverage = 0;
             int count = 0;
 
@@ -485,15 +495,28 @@ public class AudioAnalyzer {
             if (rollingAverage < volumeThreshold) {
                 if (fadeoutStartIndex < 0) {
                     fadeoutStartIndex = i; // Mark where low volume started
+                    if (App.DEBUG_MODE) {
+                        System.out.println("[DEBUG]   Low volume detected at index " + i +
+                                " (RMS=" + String.format("%.2f", rollingAverage) +
+                                ", threshold=" + String.format("%.2f", volumeThreshold) + ")");
+                    }
                 }
                 consecutiveLowVolumeSamples++;
 
                 // If we've sustained low volume long enough, return the fadeout point
                 if (consecutiveLowVolumeSamples >= samplesNeededForSustained) {
+                    if (App.DEBUG_MODE) {
+                        System.out.println("[DEBUG]   Sustained low volume confirmed after "
+                                + consecutiveLowVolumeSamples + " samples");
+                    }
                     return (int) (analysisStartSeconds * sampleRate) + fadeoutStartIndex;
                 }
             } else {
                 // Volume went back up - reset the counter
+                if (fadeoutStartIndex >= 0 && App.DEBUG_MODE) {
+                    System.out.println("[DEBUG]   Volume recovered (RMS=" + String.format("%.2f", rollingAverage) +
+                            "), resetting low-volume counter");
+                }
                 consecutiveLowVolumeSamples = 0;
                 fadeoutStartIndex = -1;
             }

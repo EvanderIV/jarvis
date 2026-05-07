@@ -10,7 +10,6 @@ import org.vosk.Recognizer;
 
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
-import com.jarvis.ParsedCommand;
 
 public class UdpListener implements Runnable {
 
@@ -21,13 +20,10 @@ public class UdpListener implements Runnable {
     // Hold a persistent instance of the fulfiller so we don't reload the JSON on every command
     private final CommandFulfiller fulfiller;
 
-    public UdpListener(DatagramSocket socket) {
+    // UPDATED CONSTRUCTOR: Now accepts the CommandFulfiller from App.java
+    public UdpListener(DatagramSocket socket, CommandFulfiller fulfiller) {
         this.socket = socket;
-        
-        System.out.println("[*] Initializing LMS and Music Manager...");
-        LmsController lmsController = new LmsController("127.0.0.1");
-        MusicManager musicManager = new MusicManager(lmsController);
-        this.fulfiller = new CommandFulfiller(musicManager, lmsController);
+        this.fulfiller = fulfiller; // Save the injected fulfiller
         
         // Initialize the Vosk Model here so it only loads into memory once.
         try {

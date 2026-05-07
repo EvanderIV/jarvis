@@ -13,16 +13,18 @@ public class App {
         System.out.println("Initializing Arbitration Server...");
 
         try {
-            // Initialize your controllers
-            SnapcastController snapcast = new SnapcastController("127.0.0.1");
+            // 1. Build the Engine (Centralized Controllers)
+            // Pointing to eminich.com ensures it connects to your remote Linux server 
+            LmsController lmsController = new LmsController("eminich.com");
+            MusicManager musicManager = new MusicManager(lmsController);
+            CommandFulfiller fulfiller = new CommandFulfiller(musicManager, lmsController);
             
-            // Open the central UDP socket
+            // 2. Open the central UDP socket
             DatagramSocket udpSocket = new DatagramSocket(WAKE_WORD_PORT);
             System.out.println("Listening for edge triggers on UDP port " + WAKE_WORD_PORT);
 
-            // Pass the socket to a dedicated listener thread
-            // Note: If you updated UdpListener to take the SnapcastController, pass it here!
-            UdpListener triggerListener = new UdpListener(udpSocket);
+            // 3. Pass the socket and the fulfiller to a dedicated listener thread
+            UdpListener triggerListener = new UdpListener(udpSocket, fulfiller);
             Thread listenerThread = new Thread(triggerListener);
             
             // Start listening in the background
@@ -34,9 +36,7 @@ public class App {
                 udpSocket.close();
             }));
 
-            // --- DELETED listenerThread.join() FROM HERE ---
-
-            // Start the Live Admin Console in the foreground
+            // 4. Start the Live Admin Console in the foreground
             Scanner scanner = new Scanner(System.in);
             System.out.println("\n[+] Type 'help' for commands.");
             
@@ -48,19 +48,20 @@ public class App {
                 
                 String[] parts = input.split(" ");
                 
+                // Using the centralized lmsController for all admin commands
                 if (parts[0].equals("scan")) {
-                    snapcast.scanForUnregisteredSpeakers();
+                    lmsController.scanForUnregisteredSpeakers();
                 } 
                 else if (parts[0].equals("list")) {
-                    snapcast.listRegisteredSpeakers();
+                    lmsController.listRegisteredSpeakers();
                 } 
                 else if (parts[0].equals("register") && parts.length >= 3) {
                     String mac = parts[1];
                     String name = input.substring(input.indexOf(parts[2])); // Captures names with spaces
-                    snapcast.registerSpeaker(mac, name);
+                    lmsController.registerSpeaker(mac, name);
                 } 
                 else if (parts[0].equals("remove") && parts.length == 2) {
-                    snapcast.removeSpeaker(parts[1]);
+                    lmsController.removeSpeaker(parts[1]);
                 }
                 else if (parts[0].equals("help")) {
                     System.out.println("Commands:");

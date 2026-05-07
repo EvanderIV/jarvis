@@ -2,7 +2,6 @@ com\jarvis\MusicManager$Track.class
 com\jarvis\ParsedCommand$Action.class
 com\jarvis\MusicManager$LibraryRoot.class
 com\jarvis\MusicManager.class
-com\jarvis\SnapcastController.class
 com\jarvis\AudioFormatValidator.class
 com\jarvis\LmsController.class
 com\jarvis\ParsedCommand$Target.class
@@ -15,6 +14,5 @@ com\jarvis\LmsController$1.class
 com\jarvis\ParsedCommand.class
 com\jarvis\CommandFulfiller$1.class
 com\jarvis\MissingContextualTargetException.class
-com\jarvis\SnapcastController$1.class
 com\jarvis\App.class
 com\jarvis\UdpListener.class

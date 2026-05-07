@@ -35,10 +35,15 @@ public class MusicManager {
     private List<String> targetMacs = new ArrayList<>();
     private String currentlyPlayingFile = null;
     private long lastTrackStartTime = 0;
-    private double lastPlaybackTime = 0;
-    private int stallCheckCount = 0;
-    private static final int STALL_THRESHOLD = 2; // Number of checks before considering it stalled
-    private static final double SILENCE_POSITION_THRESHOLD = 0.9; // 90% through song
+    
+    // Fadeout detection via audio level tracking
+    private double maxAudioLevel = 0;
+    private double previousAudioLevel = 0;
+    private int fadeoutCheckCount = 0;
+    private static final int FADEOUT_CHECK_THRESHOLD = 3; // Require consistent decline over multiple checks
+    private static final double FADEOUT_LEVEL_THRESHOLD = 30.0; // Detect as fadeout if level drops to this or below
+    private static final double FADEOUT_REMAINING_SECONDS = 8.0; // Only check fadeout in final 8 seconds
+    
     private Thread playbackMonitorThread = null;
     private volatile boolean isContinuousPlayEnabled = false;
     private volatile boolean shouldStopMonitoring = false;
@@ -222,8 +227,9 @@ public class MusicManager {
         // 6. Command LMS to play the file
         currentlyPlayingFile = fullPath;
         lastTrackStartTime = System.currentTimeMillis();
-        lastPlaybackTime = 0;
-        stallCheckCount = 0;
+        maxAudioLevel = 0;
+        previousAudioLevel = 0;
+        fadeoutCheckCount = 0;
         
         lmsController.unmute(targetMacs);
         lmsController.playFile(targetMacs, fullPath);
@@ -282,9 +288,9 @@ public class MusicManager {
     }
 
     /**
-     * Detects if the currently playing track has finished.
+     * Detects if the currently playing track has finished or should be skipped due to fadeout.
      * Queries LMS status to check if playback has stopped or moved to a new file.
-     * Also detects fadeout/silence in the last 10% of the song.
+     * Detects fadeout by tracking audio level decrease in the final seconds of a song.
      */
     private boolean hasTrackFinished() {
         if (currentlyPlayingFile == null) {
@@ -331,35 +337,41 @@ public class MusicManager {
             return true;
         }
 
-        // Check for fadeout/silence in the last 10% of the song
+        // Check for fadeout via audio level tracking in the final seconds
         Double duration = (Double) status.get("duration");
         Double currentTime = (Double) status.get("time");
+        Double audioLevel = (Double) status.get("level");
         
-        if (duration != null && duration > 0 && currentTime != null) {
-            double positionRatio = currentTime / duration;
+        if (duration != null && duration > 0 && currentTime != null && audioLevel != null) {
+            double remainingTime = duration - currentTime;
             
-            // If we're in the last 10% of the song
-            if (positionRatio >= SILENCE_POSITION_THRESHOLD) {
-                // Check if playback position has stalled (no advancement)
-                double timeDelta = Math.abs(currentTime - lastPlaybackTime);
-                
-                if (timeDelta < 0.5) { // Less than 500ms advancement since last check
-                    stallCheckCount++;
-                    if (stallCheckCount >= STALL_THRESHOLD) {
-                        System.out.println("[*] MusicManager: Detected fadeout/silence at " + 
-                                         String.format("%.1f%%", positionRatio * 100) + 
-                                         " of track. Skipping to next song.");
-                        stallCheckCount = 0;
+            // Track maximum level seen during playback
+            if (audioLevel > maxAudioLevel) {
+                maxAudioLevel = audioLevel;
+            }
+            
+            // Only check for fadeout in the final 8 seconds
+            if (remainingTime <= FADEOUT_REMAINING_SECONDS && remainingTime > 0) {
+                // Check if audio level is declining significantly
+                if (audioLevel < maxAudioLevel * 0.5) { // Level dropped to 50% or less of max
+                    fadeoutCheckCount++;
+                    
+                    if (fadeoutCheckCount >= FADEOUT_CHECK_THRESHOLD) {
+                        System.out.println("[*] MusicManager: Detected fadeout (" + 
+                                         String.format("%.1f", remainingTime) + 
+                                         "s remaining, level: " + String.format("%.1f", audioLevel) +
+                                         "). Skipping to next song.");
+                        fadeoutCheckCount = 0;
                         return true;
                     }
                 } else {
-                    stallCheckCount = 0; // Reset if time is advancing
+                    fadeoutCheckCount = 0; // Reset if level is still strong
                 }
             } else {
-                stallCheckCount = 0; // Reset if not in final 10%
+                fadeoutCheckCount = 0; // Reset if not in final window
             }
             
-            lastPlaybackTime = currentTime;
+            previousAudioLevel = audioLevel;
         }
 
         return false;
@@ -387,8 +399,9 @@ public class MusicManager {
         // Clear state
         currentTheme = null;
         currentlyPlayingFile = null;
-        lastPlaybackTime = 0;
-        stallCheckCount = 0;
+        maxAudioLevel = 0;
+        previousAudioLevel = 0;
+        fadeoutCheckCount = 0;
         playHistory.clear();
         
         // An empty list tells the LmsController to stop playback on ALL registered speakers

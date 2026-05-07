@@ -169,7 +169,7 @@ public class LmsController {
 
     /**
      * Gets the current playback status of a player.
-     * Returns a map containing playback info: "isPlaying", "currentFile", "duration", "time", etc.
+     * Returns a map containing playback info: "isPlaying", "currentFile", "duration", "time", "level", etc.
      */
     public Map<String, Object> getPlaybackStatus(String playerId) {
         Map<String, Object> status = new HashMap<>();
@@ -185,6 +185,29 @@ public class LmsController {
             }
             if (result.has("time")) {
                 status.put("time", result.get("time").getAsDouble());
+            }
+            
+            // Try to extract audio level data if available
+            // LMS may provide this in various forms - check multiple possible field names
+            double audioLevel = 0.0;
+            if (result.has("mixer")) {
+                try {
+                    JsonObject mixer = result.getAsJsonObject("mixer");
+                    if (mixer.has("level")) {
+                        audioLevel = mixer.get("level").getAsDouble();
+                    }
+                } catch (Exception e) {
+                    // If mixer doesn't have level, continue
+                }
+            }
+            if (result.has("level")) {
+                audioLevel = result.get("level").getAsDouble();
+            }
+            if (result.has("power")) {
+                audioLevel = result.get("power").getAsDouble();
+            }
+            if (audioLevel > 0) {
+                status.put("level", audioLevel);
             }
         }
         

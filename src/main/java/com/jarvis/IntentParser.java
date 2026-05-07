@@ -282,7 +282,7 @@ public class IntentParser {
         }
 
         String normalizedText = " " + rawText.toLowerCase() + " "; // Pad for easier word boundary matching
-        normalizedText = normalizedText.replaceAll("turned", "turn").replaceAll("played", "play").replaceAll("playful", "play some"); // Handle past tense variations like "turned on" -> "turn on"
+        normalizedText = normalizedText.replaceAll("turned", "turn").replaceAll("played", "play").replaceAll("playful music", "play some music").replaceAll("place music", "play some music"); // Handle past tense variations like "turned on" -> "turn on"
         
         Action foundAction = Action.UNKNOWN;
         Target foundTarget = Target.UNKNOWN;

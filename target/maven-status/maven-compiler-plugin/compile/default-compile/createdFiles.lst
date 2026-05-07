@@ -4,12 +4,14 @@ com\jarvis\MusicManager$LibraryRoot.class
 com\jarvis\MusicManager.class
 com\jarvis\SnapcastController.class
 com\jarvis\AudioFormatValidator.class
+com\jarvis\LmsController.class
 com\jarvis\ParsedCommand$Target.class
 com\jarvis\CommandFulfiller.class
 com\jarvis\CommandUnfulfillableException.class
 com\jarvis\IntentParser.class
 com\jarvis\MusicManager$ThemeDefinition.class
 com\jarvis\CommandFulfiller$CommandResult.class
+com\jarvis\LmsController$1.class
 com\jarvis\ParsedCommand.class
 com\jarvis\CommandFulfiller$1.class
 com\jarvis\MissingContextualTargetException.class

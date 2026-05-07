@@ -19,11 +19,11 @@ public class CommandFulfiller {
     
     // Injected Controllers
     private final MusicManager musicManager;
-    private final SnapcastController snapcast;
+    private final LmsController lmsController;
     
-    public CommandFulfiller(MusicManager musicManager, SnapcastController snapcast) {
+    public CommandFulfiller(MusicManager musicManager, LmsController lmsController) {
         this.musicManager = musicManager;
-        this.snapcast = snapcast;
+        this.lmsController = lmsController;
         initializeCapabilities();
     }
 
@@ -128,7 +128,7 @@ public class CommandFulfiller {
         if (command.target == Target.SPEAKER_ARRAY) {
             musicManager.stopMusic();
             List<String> targetMacs = new ArrayList<>(); // Empty list applies to all speakers
-            snapcast.mute(targetMacs);
+            lmsController.mute(targetMacs);
             message = "Music stopped and speakers muted.";
         } else {
             // TODO: Send MQTT/HTTP command to smart plugs/lights
@@ -142,9 +142,9 @@ public class CommandFulfiller {
         System.out.println("[+] " + message);
         
         if (command.target == Target.SPEAKER_ARRAY) {
-            // Note: To cleanly increment volume, you'd track state locally or query Snapcast.
+            // Note: To cleanly increment volume, you'd track state locally or query LMS.
             // For now, we will just set it to a static "loud" volume.
-            snapcast.setVolume(new ArrayList<>(), 75);
+            lmsController.setVolume(new ArrayList<>(), 75);
         }
         
         return new CommandResult(true, message);
@@ -156,7 +156,7 @@ public class CommandFulfiller {
         
         if (command.target == Target.SPEAKER_ARRAY) {
             // Note: Same as above. Hardcoded to a "quiet" state for now.
-            snapcast.setVolume(new ArrayList<>(), 25);
+            lmsController.setVolume(new ArrayList<>(), 25);
         }
         
         return new CommandResult(true, message);

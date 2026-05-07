@@ -17,9 +17,17 @@ public class UdpListener implements Runnable {
     private final DatagramSocket socket;
     private volatile boolean running = true;
     private Model voskModel;
+    
+    // Hold a persistent instance of the fulfiller so we don't reload the JSON on every command
+    private final CommandFulfiller fulfiller;
 
     public UdpListener(DatagramSocket socket) {
         this.socket = socket;
+        
+        System.out.println("[*] Initializing LMS and Music Manager...");
+        LmsController lmsController = new LmsController("127.0.0.1");
+        MusicManager musicManager = new MusicManager(lmsController);
+        this.fulfiller = new CommandFulfiller(musicManager, lmsController);
         
         // Initialize the Vosk Model here so it only loads into memory once.
         try {
@@ -76,83 +84,79 @@ public class UdpListener implements Runnable {
                         }
                         
                         // Otherwise, it's raw audio bytes. Write them to our in-memory buffer.
-                    audioStreamBuffer.write(audioPacket.getData(), 0, audioPacket.getLength());
-                }
+                        audioStreamBuffer.write(audioPacket.getData(), 0, audioPacket.getLength());
+                    }
                 
-                byte[] completeAudioPayload = audioStreamBuffer.toByteArray();
-                System.out.println("[+] Stream complete! Captured " + completeAudioPayload.length + " bytes of raw audio.");
-                
-                // Validate audio format
-                AudioFormatValidator.isVoskCompatible(completeAudioPayload, 
-                                                      AudioFormatValidator.VOSK_SAMPLE_RATE,
-                                                      AudioFormatValidator.VOSK_BITS_PER_SAMPLE,
-                                                      AudioFormatValidator.VOSK_CHANNELS);
-                long durationMs = AudioFormatValidator.calculateDurationMs(completeAudioPayload);
-                System.out.println("[*] Audio duration: " + durationMs + " ms");
-                
-                // Pass the captured audio to Vosk
-                if (voskModel != null && completeAudioPayload.length > 0) {
-                    System.out.println("[*] Transcribing audio...");
-                    // Create a recognizer for this specific audio stream (16000 Hz is standard for ESP32/Emulators)
-                    try (Recognizer recognizer = new Recognizer(voskModel, 16000)) {
-                        // Feed the entire byte array to the recognizer
-                        recognizer.acceptWaveForm(completeAudioPayload, completeAudioPayload.length);
-                        
-                        // Extract the final JSON result
-                        String resultJson = recognizer.getFinalResult();
-
-                        Gson gson = new Gson();
-                        JsonObject jsonObject = gson.fromJson(resultJson, JsonObject.class);
-                        String transcribedText = jsonObject.has("text") ? jsonObject.get("text").getAsString() : "";
-
-                        String[] jarvisPhonetics = {"jarvis", "jervis", "darvish", "drivers", "travis", "harvest", "journalist", "german", "germans", "jarred", "your this", "this", "jerks"};
-
-                        String jarvisRegex = "(?i)\\b(";
-                        for (int i = 0; i < jarvisPhonetics.length - 1; i++) {
-                            jarvisRegex += jarvisPhonetics[i] + " |";
-                        }
-                        jarvisRegex += jarvisPhonetics[jarvisPhonetics.length - 1] + " )\\b";
-
-
-                        String[] prefixCommands = {"good morning", "good night", "goodnight"};
-
-                        String overrideEndCasesForCommands = "";
-                        for (int i = 0; i < jarvisPhonetics.length; i++) {
-                            for (String prefCmd : prefixCommands) {
-                                overrideEndCasesForCommands += prefCmd + " " + jarvisPhonetics[i] + "|";
-                            }
-                        }
-                        overrideEndCasesForCommands = overrideEndCasesForCommands.substring(0, overrideEndCasesForCommands.length() - 1); // Remove last '|'
-
-                        String alternateWakeWordsRegex = "(?i)\\b(wake up daddy's home|wake up daddy home|we got daddy's home|we got daddy home|we've got daddy's home|we've got daddy home|" + overrideEndCasesForCommands + ")\\b";
-
-                        String cleanedText = transcribedText.replaceAll(jarvisRegex, "").trim();
-
-                        System.out.println("[+] Vosk Transcription: " + transcribedText);
-                        
-                        // Detect jarvis wake word to execute command and parse intent)
-                        if (transcribedText.toLowerCase().matches(".*" + jarvisRegex + ".*") || transcribedText.toLowerCase().matches(".*" + alternateWakeWordsRegex + ".*")) {
-                            IntentParser parser = new IntentParser();
-                            ParsedCommand command = parser.parse(cleanedText);
-                            System.out.println("[+] Parsed Command: " + command);
+                    byte[] completeAudioPayload = audioStreamBuffer.toByteArray();
+                    System.out.println("[+] Stream complete! Captured " + completeAudioPayload.length + " bytes of raw audio.");
+                    
+                    // Validate audio format
+                    AudioFormatValidator.isVoskCompatible(completeAudioPayload, 
+                                                          AudioFormatValidator.VOSK_SAMPLE_RATE,
+                                                          AudioFormatValidator.VOSK_BITS_PER_SAMPLE,
+                                                          AudioFormatValidator.VOSK_CHANNELS);
+                    long durationMs = AudioFormatValidator.calculateDurationMs(completeAudioPayload);
+                    System.out.println("[*] Audio duration: " + durationMs + " ms");
+                    
+                    // Pass the captured audio to Vosk
+                    if (voskModel != null && completeAudioPayload.length > 0) {
+                        System.out.println("[*] Transcribing audio...");
+                        // Create a recognizer for this specific audio stream (16000 Hz is standard for ESP32/Emulators)
+                        try (Recognizer recognizer = new Recognizer(voskModel, 16000)) {
+                            // Feed the entire byte array to the recognizer
+                            recognizer.acceptWaveForm(completeAudioPayload, completeAudioPayload.length);
                             
-                            // Execute the command
-                            SnapcastController snapcast = new SnapcastController("127.0.0.1");
-                            MusicManager musicManager = new MusicManager(snapcast);
-                            CommandFulfiller fulfiller = new CommandFulfiller(musicManager, snapcast);
-                            CommandFulfiller.CommandResult result = fulfiller.fulfill(command);
-                            System.out.println(result);
+                            // Extract the final JSON result
+                            String resultJson = recognizer.getFinalResult();
+
+                            Gson gson = new Gson();
+                            JsonObject jsonObject = gson.fromJson(resultJson, JsonObject.class);
+                            String transcribedText = jsonObject.has("text") ? jsonObject.get("text").getAsString() : "";
+
+                            String[] jarvisPhonetics = {"jarvis", "jervis", "darvish", "drivers", "travis", "harvest", "journalist", "german", "germans", "jarred", "your this", "this", "jerks"};
+
+                            String jarvisRegex = "(?i)\\b(";
+                            for (int i = 0; i < jarvisPhonetics.length - 1; i++) {
+                                jarvisRegex += jarvisPhonetics[i] + " |";
+                            }
+                            jarvisRegex += jarvisPhonetics[jarvisPhonetics.length - 1] + " )\\b";
+
+
+                            String[] prefixCommands = {"good morning", "good night", "goodnight"};
+
+                            String overrideEndCasesForCommands = "";
+                            for (int i = 0; i < jarvisPhonetics.length; i++) {
+                                for (String prefCmd : prefixCommands) {
+                                    overrideEndCasesForCommands += prefCmd + " " + jarvisPhonetics[i] + "|";
+                                }
+                            }
+                            overrideEndCasesForCommands = overrideEndCasesForCommands.substring(0, overrideEndCasesForCommands.length() - 1); // Remove last '|'
+
+                            String alternateWakeWordsRegex = "(?i)\\b(wake up daddy's home|wake up daddy home|we got daddy's home|we got daddy home|we've got daddy's home|we've got daddy home|" + overrideEndCasesForCommands + ")\\b";
+
+                            String cleanedText = transcribedText.replaceAll(jarvisRegex, "").trim();
+
+                            System.out.println("[+] Vosk Transcription: " + transcribedText);
+                            
+                            // Detect jarvis wake word to execute command and parse intent)
+                            if (transcribedText.toLowerCase().matches(".*" + jarvisRegex + ".*") || transcribedText.toLowerCase().matches(".*" + alternateWakeWordsRegex + ".*")) {
+                                IntentParser parser = new IntentParser();
+                                ParsedCommand command = parser.parse(cleanedText);
+                                System.out.println("[+] Parsed Command: " + command);
+                                
+                                // Execute the command using the persistently loaded fulfiller
+                                CommandFulfiller.CommandResult result = fulfiller.fulfill(command);
+                                System.out.println(result);
+                            }
                         }
                     }
                 }
-                
-            }
 
-        } catch (MissingContextualTargetException e) {
-            System.err.println("[-] Parsing Error: " + e.getMessage());
-        } catch (CommandUnfulfillableException e) {
-            System.err.println("[-] Error in UDP listener: " + e.getMessage());
-        } catch (Exception e) {
+            } catch (MissingContextualTargetException e) {
+                System.err.println("[-] Parsing Error: " + e.getMessage());
+            } catch (CommandUnfulfillableException e) {
+                System.err.println("[-] Error in UDP listener: " + e.getMessage());
+            } catch (Exception e) {
                 if (running) {
                     System.err.println("Error in UDP listener: " + e.getMessage());
                 }

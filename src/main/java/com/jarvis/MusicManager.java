@@ -16,19 +16,14 @@ public class MusicManager {
 
     private final String MUSIC_DIR = "/home/evanm/Music/jarvis-music/"; 
     private final String INDEX_FILE = "music.json"; 
-    
-    // Snapcast default pipe
-    private final String SNAPCAST_STREAM_ID = "House"; 
-    private final String SNAPCAST_PIPE_PATH = "/tmp/snapfifo"; 
 
-    private final SnapcastController snapcast;
+    private final LmsController lmsController;
     private final Gson gson;
     private List<Track> library = new ArrayList<>();
     
     // Theme translation dictionary
     private final Map<String, ThemeDefinition> themeMap = new HashMap<>();
     
-    private Process currentFfmpegProcess;
     private final Random random = new Random();
 
     // --- Data Model for JSON Parsing ---
@@ -58,8 +53,8 @@ public class MusicManager {
         }
     }
 
-    public MusicManager(SnapcastController snapcast) {
-        this.snapcast = snapcast;
+    public MusicManager(LmsController lmsController) {
+        this.lmsController = lmsController;
         this.gson = new Gson();
         loadLibrary();
         initializeThemes();
@@ -79,10 +74,9 @@ public class MusicManager {
         themeMap.put("electronic", new ThemeDefinition(new String[]{"Electronic"}, 1, 4));
         themeMap.put("rock",       new ThemeDefinition(new String[]{"Rock"}, 2, 4));
         themeMap.put("ambient",    new ThemeDefinition(new String[]{"Ambient"}, 0, 2));
-        themeMap.put("country",    new ThemeDefinition(new String[]{"Country", "Folk"}, 1, 4)); // Folk is heavily represented in your JSON
+        themeMap.put("country",    new ThemeDefinition(new String[]{"Country", "Folk"}, 1, 4)); 
         
-        // Funk/Hip Hop don't strictly exist in your JSON yet, but we'll set up the logic 
-        // to catch them when added, or fall back to upbeat rhythmic tracks.
+        // Funk/Hip Hop
         themeMap.put("funk",       new ThemeDefinition(new String[]{"Funk", "Groove", "Jazz", "+Upbeat"}, 2, 4));
         themeMap.put("hip hop",    new ThemeDefinition(new String[]{"Hip Hop", "Rap", "Beat"}, 2, 4));
 
@@ -98,7 +92,7 @@ public class MusicManager {
         themeMap.put("wakeup",     new ThemeDefinition(new String[]{"Wakeup", "Happy", "Upbeat", "Uplifting", "-Somber"}, 2, 3));
         
         // "fancy_restaurant": Dinner/elegant music (Smooth, unobtrusive, Low Speed)
-        themeMap.put("fancy_restaurant", new ThemeDefinition(new String[]{"Jazz", "Piano", "Relaxing", "-Epic", "-Tense", "-Driven", "-Wakeup", "-Upbeat", "-Somber"}, 0, 2));
+        themeMap.put("fancy_restaurant", new ThemeDefinition(new String[]{"Jazz", "Piano", "Relaxing", "Relaxed", "-Epic", "-Tense", "-Driven", "-Wakeup", "-Upbeat", "-Somber"}, 0, 2));
     }
 
     /**
@@ -131,7 +125,7 @@ public class MusicManager {
     }
 
     /**
-     * Finds a matching track, routes the speakers, and starts playback.
+     * Finds a matching track, un-mutes the speakers, and instructs LMS to play it.
      */
     public void playMusic(String parameter, List<String> targetMacs) {
         if (library.isEmpty()) {
@@ -152,22 +146,18 @@ public class MusicManager {
         
         System.out.println("[*] MusicManager: Selected '" + selectedTrack.title + "' for query: " + parameter);
 
-        // 3. Route the Snapcast speakers to the correct stream
-        snapcast.playStream(targetMacs, SNAPCAST_STREAM_ID);
-        snapcast.unmute(targetMacs); 
-
-        // 4. Start ffmpeg to pump the audio into the Snapcast FIFO pipe
-        startFfmpegStream(fullPath, SNAPCAST_PIPE_PATH);
+        // 3. Command LMS to play the file natively
+        lmsController.unmute(targetMacs); 
+        lmsController.playFile(targetMacs, fullPath); 
     }
 
     /**
      * Stops currently playing music.
      */
     public void stopMusic() {
-        if (currentFfmpegProcess != null && currentFfmpegProcess.isAlive()) {
-            currentFfmpegProcess.destroy();
-            System.out.println("[*] MusicManager: Stopped playback.");
-        }
+        System.out.println("[*] MusicManager: Stopping playback.");
+        // An empty list tells the LmsController to stop playback on ALL registered speakers
+        lmsController.stop(new ArrayList<>());
     }
 
     /**
@@ -247,34 +237,5 @@ public class MusicManager {
             return true;
         }
         return false;
-    }
-
-    /**
-     * Handles the low-level OS process of piping ffmpeg data to Snapcast.
-     */
-    private void startFfmpegStream(String filePath, String pipePath) {
-        stopMusic();
-
-        try {
-            ProcessBuilder pb = new ProcessBuilder(
-                "ffmpeg",
-                "-re",
-                "-i", filePath,
-                "-f", "s16le",
-                "-ar", "48000", 
-                "-ac", "2",
-                "-y", 
-                pipePath
-            );
-            
-            pb.redirectError(ProcessBuilder.Redirect.DISCARD);
-            pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
-            
-            currentFfmpegProcess = pb.start();
-            System.out.println("[+] Playing via ffmpeg -> " + pipePath);
-            
-        } catch (Exception e) {
-            System.err.println("[-] Failed to start ffmpeg: " + e.getMessage());
-        }
     }
 }

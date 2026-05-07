@@ -14,6 +14,7 @@ import com.google.gson.JsonObject;
 
 public class UdpListener implements Runnable {
 
+    private final static int TIMEOUT_SECONDS = 5000;
     private final DatagramSocket socket;
     private volatile boolean running = true;
     private Model voskModel;
@@ -72,7 +73,7 @@ public class UdpListener implements Runnable {
                     // Set a 7-second timeout for audio reception
                     // (commands are typically much shorter than this)
                     int previousTimeout = socket.getSoTimeout();
-                    socket.setSoTimeout(7000);
+                    socket.setSoTimeout(TIMEOUT_SECONDS * 1000);
                     
                     try {
                         while (running) {
@@ -90,7 +91,7 @@ public class UdpListener implements Runnable {
                             audioStreamBuffer.write(audioPacket.getData(), 0, audioPacket.getLength());
                         }
                     } catch (SocketTimeoutException e) {
-                        System.out.println("[*] Audio stream timeout (7 seconds elapsed). Stopping audio capture.");
+                        System.out.println("[*] Audio stream timeout (" + TIMEOUT_SECONDS + " seconds elapsed). Stopping audio capture.");
                     } finally {
                         // Restore the original socket timeout
                         socket.setSoTimeout(previousTimeout);

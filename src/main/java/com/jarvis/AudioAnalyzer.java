@@ -164,7 +164,8 @@ public class AudioAnalyzer {
     }
     
     /**
-     * Converts an audio file to WAV format.
+     * Converts an audio file to WAV format using FFmpeg.
+     * Works with MP3, FLAC, M4A, and other formats that FFmpeg supports.
      * Returns the path to the temporary WAV file, or null if conversion fails.
      */
     private static String convertToWav(String sourcePath) {
@@ -175,63 +176,97 @@ public class AudioAnalyzer {
         }
         
         String tempPath = sourcePath + ".analysis.wav";
-        File tempWavFile = new File(tempPath);
         
-        AudioInputStream sourceStream = null;
         try {
-            // Try to read the source audio
-            sourceStream = AudioSystem.getAudioInputStream(sourceFile);
-            AudioFormat sourceFormat = sourceStream.getFormat();
+            // Check if ffmpeg is available
+            if (!isFfmpegAvailable()) {
+                System.err.println("[-] AudioAnalyzer: FFmpeg is not installed or not in PATH");
+                return null;
+            }
             
-            // Convert to standard WAV format (PCM, 44.1kHz, 16-bit, mono/stereo)
-            AudioFormat wavFormat = new AudioFormat(
-                AudioFormat.Encoding.PCM_SIGNED,
-                44100,                           // Sample rate
-                16,                              // Sample size in bits
-                sourceFormat.getChannels(),      // Keep original channel count
-                sourceFormat.getChannels() * 2,  // Frame size
-                44100,                           // Frame rate
-                false                            // Little endian
+            // Build FFmpeg command: ffmpeg -i input.mp3 -acodec pcm_s16le -ar 44100 output.wav
+            ProcessBuilder pb = new ProcessBuilder(
+                "ffmpeg",
+                "-i", sourcePath,                    // Input file
+                "-acodec", "pcm_s16le",             // Audio codec (16-bit PCM)
+                "-ar", "44100",                      // Audio rate (sample rate)
+                "-y",                                // Overwrite output file without asking
+                tempPath                             // Output file
             );
             
-            // Convert and write to temporary WAV
-            try (AudioInputStream convertedStream = AudioSystem.getAudioInputStream(wavFormat, sourceStream)) {
-                int bytesWritten = AudioSystem.write(convertedStream, javax.sound.sampled.AudioFileFormat.Type.WAVE, tempWavFile);
-                
-                if (bytesWritten > 0) {
+            // Redirect stderr to suppress FFmpeg's verbose output
+            pb.redirectErrorStream(true);
+            
+            if (App.DEBUG_MODE) {
+                System.out.println("[DEBUG] AudioAnalyzer: Running FFmpeg conversion...");
+            }
+            
+            Process process = pb.start();
+            
+            // Read and discard FFmpeg output (suppress verbose logging)
+            java.io.InputStream is = process.getInputStream();
+            byte[] buffer = new byte[1024];
+            while (is.read(buffer) != -1) {
+                // Discard output
+            }
+            is.close();
+            
+            // Wait for FFmpeg to complete
+            int exitCode = process.waitFor();
+            
+            if (exitCode == 0) {
+                File tempFile = new File(tempPath);
+                if (tempFile.exists() && tempFile.length() > 0) {
                     if (App.DEBUG_MODE) {
-                        System.out.println("[DEBUG] AudioAnalyzer: Converted to WAV (" + bytesWritten + " bytes)");
+                        System.out.println("[DEBUG] AudioAnalyzer: FFmpeg conversion succeeded (" + tempFile.length() + " bytes)");
                     }
                     return tempPath;
                 } else {
-                    System.err.println("[-] AudioAnalyzer: No bytes written during conversion");
-                    if (tempWavFile.exists()) {
-                        tempWavFile.delete();
+                    System.err.println("[-] AudioAnalyzer: FFmpeg produced empty output");
+                    if (tempFile.exists()) {
+                        tempFile.delete();
                     }
                     return null;
                 }
-            }
-        } catch (javax.sound.sampled.UnsupportedAudioFileException e) {
-            System.err.println("[-] AudioAnalyzer: Cannot convert - format not supported by system: " + e.getMessage());
-            if (tempWavFile.exists()) {
-                tempWavFile.delete();
-            }
-            return null;
-        } catch (Exception e) {
-            System.err.println("[-] AudioAnalyzer: Conversion to WAV failed: " + e.getMessage());
-            if (tempWavFile.exists()) {
-                tempWavFile.delete();
-            }
-            return null;
-        } finally {
-            // Close the source stream if it was opened
-            if (sourceStream != null) {
-                try {
-                    sourceStream.close();
-                } catch (Exception e) {
-                    System.err.println("[-] AudioAnalyzer: Error closing source stream: " + e.getMessage());
+            } else {
+                System.err.println("[-] AudioAnalyzer: FFmpeg conversion failed with exit code " + exitCode);
+                File tempFile = new File(tempPath);
+                if (tempFile.exists()) {
+                    tempFile.delete();
                 }
+                return null;
             }
+        } catch (Exception e) {
+            System.err.println("[-] AudioAnalyzer: Error during FFmpeg conversion: " + e.getMessage());
+            File tempFile = new File(tempPath);
+            if (tempFile.exists()) {
+                tempFile.delete();
+            }
+            return null;
+        }
+    }
+    
+    /**
+     * Checks if FFmpeg is available in the system PATH.
+     */
+    private static boolean isFfmpegAvailable() {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("ffmpeg", "-version");
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            
+            // Discard output
+            java.io.InputStream is = process.getInputStream();
+            byte[] buffer = new byte[1024];
+            while (is.read(buffer) != -1) {
+                // Discard
+            }
+            is.close();
+            
+            int exitCode = process.waitFor();
+            return exitCode == 0;
+        } catch (Exception e) {
+            return false;
         }
     }
     

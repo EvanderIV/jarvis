@@ -217,7 +217,7 @@ public class IntentParser {
             "drug getting", "door getting", "door cunning",
             "door to me", "door opening", "jorc opening", "jork opening",
             "joking", "majorcan getting", "dorgan it", "jerk", "jerk opening", "jerk getting",
-            "chortling"
+            "chortling", "door kidding"
         );
         List<String> jorkening = generatePhrasePrefixes(jorkeningBase, "begin the ", "initiate the ", "begin ", "initiate ", "the in the ", "the and the ");
         List<String> theGame = Arrays.asList("lost the game");

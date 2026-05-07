@@ -16,19 +16,19 @@ import java.util.stream.Collectors;
 
 public class MusicManager {
 
-    private final String MUSIC_DIR = "/home/evanm/Music/jarvis-music/"; 
-    private final String INDEX_FILE = "music.json"; 
+    private final String MUSIC_DIR = "/home/evanm/Music/jarvis-music/";
+    private final String INDEX_FILE = "music.json";
     private static final int MAX_HISTORY_SIZE = 50;
 
     private final LmsController lmsController;
     private final Gson gson;
     private List<Track> library = new ArrayList<>();
-    
+
     // Theme translation dictionary
     private final Map<String, ThemeDefinition> themeMap = new HashMap<>();
-    
+
     private final Random random = new Random();
-    
+
     // Continuous playback state
     private String currentTheme = null;
     private final Set<String> playHistory = new LinkedHashSet<>();
@@ -36,13 +36,13 @@ public class MusicManager {
     private String currentlyPlayingFile = null;
     private long lastTrackStartTime = 0;
     private float currentTrackFadeoutTimestamp = -1; // Fadeout point for current track, or -1 if none detected
-    
+
     private Thread playbackMonitorThread = null;
     private volatile boolean isContinuousPlayEnabled = false;
     private volatile boolean shouldStopMonitoring = false;
 
     // --- Data Model for JSON Parsing ---
-    
+
     public static class LibraryRoot {
         public List<Track> music;
     }
@@ -80,34 +80,43 @@ public class MusicManager {
      * Logic Prefixes:
      * "+Tag" : Track MUST have this tag (AND)
      * "-Tag" : Track MUST NOT have this tag (NOT)
-     * "Tag"  : Track should have this tag (OR - must match at least one un-prefixed tag if provided)
+     * "Tag" : Track should have this tag (OR - must match at least one un-prefixed
+     * tag if provided)
      */
     private void initializeThemes() {
         // --- Exact Genre Translations ---
-        themeMap.put("jazz",       new ThemeDefinition(new String[]{"Jazz"}, 0, 4));
-        themeMap.put("classical",  new ThemeDefinition(new String[]{"Orchestral", "Piano"}, 0, 3));
-        themeMap.put("electronic", new ThemeDefinition(new String[]{"Electronic"}, 1, 4));
-        themeMap.put("rock",       new ThemeDefinition(new String[]{"Rock"}, 2, 4));
-        themeMap.put("ambient",    new ThemeDefinition(new String[]{"Ambient"}, 0, 2));
-        themeMap.put("country",    new ThemeDefinition(new String[]{"Country", "Folk"}, 1, 4)); 
-        
+        themeMap.put("jazz", new ThemeDefinition(new String[] { "Jazz" }, 0, 4));
+        themeMap.put("classical", new ThemeDefinition(new String[] { "Orchestral", "Piano" }, 0, 3));
+        themeMap.put("electronic", new ThemeDefinition(new String[] { "Electronic" }, 1, 4));
+        themeMap.put("rock", new ThemeDefinition(new String[] { "Rock" }, 2, 4));
+        themeMap.put("ambient", new ThemeDefinition(new String[] { "Ambient" }, 0, 2));
+        themeMap.put("country", new ThemeDefinition(new String[] { "Country", "Folk" }, 1, 4));
+
         // Funk/Hip Hop
-        themeMap.put("funk",       new ThemeDefinition(new String[]{"Funk", "Groove", "Jazz", "+Upbeat"}, 2, 4));
-        themeMap.put("hip hop",    new ThemeDefinition(new String[]{"Hip Hop", "Rap", "Beat"}, 2, 4));
+        themeMap.put("funk", new ThemeDefinition(new String[] { "Funk", "Groove", "Jazz", "+Upbeat" }, 2, 4));
+        themeMap.put("hip hop", new ThemeDefinition(new String[] { "Hip Hop", "Rap", "Beat" }, 2, 4));
 
         // --- Vibe / Mood Translations (Using Logic & Speed) ---
-        
+
         // "active": Energetic, workout, pump up (Must avoid chill vibes, High Speed)
-        themeMap.put("active",     new ThemeDefinition(new String[]{"Upbeat", "Driven", "Epic", "-Somber", "-Relaxing"}, 3, 4));
-        
+        themeMap.put("active",
+                new ThemeDefinition(new String[] { "Upbeat", "Driven", "Epic", "-Somber", "-Relaxing" }, 3, 4));
+
         // "lofi": Chill, study, peaceful (Must be background friendly, Low Speed)
-        themeMap.put("lofi",       new ThemeDefinition(new String[]{"Relaxing", "Focused", "Ambient", "-Tense", "-Epic", "-Driven"}, 0, 2));
-        
-        // "wakeup": Morning music (Use the explicit Wakeup tag or generally happy tracks, Mid-High Speed)
-        themeMap.put("wakeup",     new ThemeDefinition(new String[]{"Wakeup", "Happy", "Upbeat", "Uplifting", "-Somber"}, 2, 3));
-        
+        themeMap.put("lofi", new ThemeDefinition(
+                new String[] { "+Focused", "Relaxing", "Ambient", "-Tense", "-Epic", "-Driven" }, 1, 2));
+
+        themeMap.put("relaxing", new ThemeDefinition(
+                new String[] { "+Relaxing", "Ambient", "Focused", "-Tense", "-Epic", "-Driven", "-Repetitive" }, 0, 1));
+
+        // "wakeup": Morning music (Use the explicit Wakeup tag or generally happy
+        // tracks, Mid-High Speed)
+        themeMap.put("wakeup",
+                new ThemeDefinition(new String[] { "Wakeup", "Happy", "Upbeat", "Uplifting", "-Somber" }, 2, 3));
+
         // "fancy_restaurant": Dinner/elegant music (Smooth, unobtrusive, Low Speed)
-        themeMap.put("fancy_restaurant", new ThemeDefinition(new String[]{"+Jazz", "Piano", "Relaxing", "Relaxed", "-Epic", "-Tense", "-Driven", "-Wakeup", "-Upbeat", "-Somber"}, 0, 2));
+        themeMap.put("fancy_restaurant", new ThemeDefinition(new String[] { "+Jazz", "Piano", "Relaxing", "Relaxed",
+                "-Epic", "-Tense", "-Driven", "-Wakeup", "-Upbeat", "-Somber" }, 0, 2));
     }
 
     /**
@@ -115,7 +124,7 @@ public class MusicManager {
      */
     private void loadLibrary() {
         Path indexPath = Paths.get(MUSIC_DIR, INDEX_FILE);
-        
+
         if (!Files.exists(indexPath)) {
             indexPath = Paths.get("/home/evanm/Music/", INDEX_FILE);
         }
@@ -127,7 +136,7 @@ public class MusicManager {
 
         try (Reader reader = Files.newBufferedReader(indexPath)) {
             LibraryRoot root = gson.fromJson(reader, LibraryRoot.class);
-            
+
             if (root != null && root.music != null) {
                 library = root.music;
                 System.out.println("[+] MusicManager: Loaded " + library.size() + " tracks from index.");
@@ -164,8 +173,10 @@ public class MusicManager {
     }
 
     /**
-     * Plays the next track from the current theme, respecting play history to avoid repeats.
-     * If all tracks have been played, resets history (keeping only the most recent track).
+     * Plays the next track from the current theme, respecting play history to avoid
+     * repeats.
+     * If all tracks have been played, resets history (keeping only the most recent
+     * track).
      */
     private void playNextTrack() {
         if (!isContinuousPlayEnabled || currentTheme == null) {
@@ -181,13 +192,13 @@ public class MusicManager {
         List<Track> matches = findTracks(currentTheme);
         if (matches.isEmpty()) {
             System.out.println("[-] No tracks found matching theme: " + currentTheme + ". Defaulting to random.");
-            matches = library; 
+            matches = library;
         }
 
         // 2. Filter out tracks that are in the history
         List<Track> availableTracks = matches.stream()
-            .filter(track -> !playHistory.contains(track.file))
-            .collect(Collectors.toList());
+                .filter(track -> !playHistory.contains(track.file))
+                .collect(Collectors.toList());
 
         // 3. If all tracks have been played, reset history (keep only the most recent)
         if (availableTracks.isEmpty()) {
@@ -195,13 +206,13 @@ public class MusicManager {
                 System.out.println("[*] MusicManager: All tracks exhausted, resetting history (keeping most recent).");
                 playHistory.clear();
                 playHistory.add(currentlyPlayingFile);
-                
+
                 // Re-filter for available tracks
                 availableTracks = matches.stream()
-                    .filter(track -> !playHistory.contains(track.file))
-                    .collect(Collectors.toList());
+                        .filter(track -> !playHistory.contains(track.file))
+                        .collect(Collectors.toList());
             }
-            
+
             // If still no available tracks, allow all
             if (availableTracks.isEmpty()) {
                 availableTracks = matches;
@@ -211,7 +222,7 @@ public class MusicManager {
         // 4. Pick a random track from available matches
         Track selectedTrack = availableTracks.get(random.nextInt(availableTracks.size()));
         String fullPath = Paths.get(MUSIC_DIR, selectedTrack.file).toString();
-        
+
         System.out.println("[*] MusicManager: Selected '" + selectedTrack.title + "' for theme: " + currentTheme);
 
         // 5. Add to history
@@ -221,11 +232,12 @@ public class MusicManager {
         currentlyPlayingFile = fullPath;
         lastTrackStartTime = System.currentTimeMillis();
         currentTrackFadeoutTimestamp = -1; // Mark as "not yet analyzed"
-        
+
         lmsController.unmute(targetMacs);
         lmsController.playFile(targetMacs, fullPath);
-        
-        // 7. Analyze audio for fadeout detection IN BACKGROUND (with automatic MP3 conversion if needed)
+
+        // 7. Analyze audio for fadeout detection IN BACKGROUND (with automatic MP3
+        // conversion if needed)
         spawnAnalysisThread(fullPath);
     }
 
@@ -234,14 +246,14 @@ public class MusicManager {
      */
     private void addToHistory(String trackFile) {
         playHistory.add(trackFile);
-        
+
         // Enforce max history size by removing the oldest entry
         if (playHistory.size() > MAX_HISTORY_SIZE) {
             // LinkedHashSet maintains insertion order, so remove the first (oldest) element
             playHistory.remove(playHistory.iterator().next());
         }
     }
-    
+
     /**
      * Spawns a background thread to analyze an audio file for fadeout detection.
      * Uses automatic MP3-to-WAV conversion if needed.
@@ -252,26 +264,27 @@ public class MusicManager {
             if (App.DEBUG_MODE) {
                 System.out.println("[DEBUG] MusicManager: Analysis thread started for " + filePath);
             }
-            
+
             AudioAnalyzer.FadeoutInfo fadeoutInfo = AudioAnalyzer.analyzeAudioWithConversion(filePath);
-            
+
             // Update the fadeout timestamp if still playing the same file
             if (currentlyPlayingFile != null && currentlyPlayingFile.equals(filePath)) {
                 currentTrackFadeoutTimestamp = (fadeoutInfo != null) ? fadeoutInfo.fadeoutTimestamp : -1;
-                
+
                 if (fadeoutInfo != null) {
-                    System.out.println("[*] MusicManager: Fadeout analysis complete at " + 
-                                     String.format("%.1f", fadeoutInfo.fadeoutTimestamp) + "s");
+                    System.out.println("[*] MusicManager: Fadeout analysis complete at " +
+                            String.format("%.1f", fadeoutInfo.fadeoutTimestamp) + "s");
                 }
             }
         }, "AudioAnalysisThread");
-        
+
         analysisThread.setDaemon(true);
         analysisThread.start();
     }
 
     /**
-     * Starts a background thread that monitors playback status and queues the next track
+     * Starts a background thread that monitors playback status and queues the next
+     * track
      * when the current one finishes.
      */
     private void startPlaybackMonitor() {
@@ -282,7 +295,7 @@ public class MusicManager {
 
         playbackMonitorThread = new Thread(() -> {
             System.out.println("[*] MusicManager: Playback monitor started.");
-            
+
             while (!shouldStopMonitoring && isContinuousPlayEnabled) {
                 try {
                     // Check if current track has finished playing
@@ -290,26 +303,26 @@ public class MusicManager {
                         System.out.println("[*] MusicManager: Current track finished, queuing next...");
                         playNextTrack();
                     }
-                    
+
                     // Determine sleep duration based on time remaining in song
                     long sleepDuration = 2000; // Default 2 seconds
-                    
+
                     // Get speaker list for status check
                     List<String> speakersToCheck = targetMacs;
                     if (speakersToCheck.isEmpty()) {
                         speakersToCheck = lmsController.getAllRegisteredSpeakers();
                     }
-                    
+
                     // If we have speakers, check status
                     if (!speakersToCheck.isEmpty() && currentlyPlayingFile != null) {
                         String firstSpeaker = speakersToCheck.get(0);
                         Map<String, Object> status = lmsController.getPlaybackStatus(firstSpeaker);
-                        
+
                         if (!status.isEmpty()) {
                             // Could add custom sleep logic here for audio analysis in the future
                         }
                     }
-                    
+
                     Thread.sleep(sleepDuration);
 
                     if (shouldStopMonitoring || !isContinuousPlayEnabled) {
@@ -320,10 +333,10 @@ public class MusicManager {
                     break;
                 }
             }
-            
+
             System.out.println("[*] MusicManager: Playback monitor stopped.");
         }, "MusicPlaybackMonitor");
-        
+
         playbackMonitorThread.setDaemon(true);
         playbackMonitorThread.start();
     }
@@ -349,7 +362,7 @@ public class MusicManager {
         if (speakersToCheck.isEmpty()) {
             speakersToCheck = lmsController.getAllRegisteredSpeakers();
         }
-        
+
         // If we still have no speakers to check, can't determine status
         if (speakersToCheck.isEmpty()) {
             return false;
@@ -358,14 +371,14 @@ public class MusicManager {
         // Query the first available speaker for playback status
         String firstSpeaker = speakersToCheck.get(0);
         Map<String, Object> status = lmsController.getPlaybackStatus(firstSpeaker);
-        
+
         if (status.isEmpty()) {
             // If we can't get status, assume playback hasn't finished
             return false;
         }
 
         String mode = (String) status.get("mode");
-        
+
         // If the player is stopped, the track has finished
         if ("stop".equals(mode)) {
             return true;
@@ -376,16 +389,16 @@ public class MusicManager {
         if (currentFile != null && !currentlyPlayingFile.contains(currentFile)) {
             return true;
         }
-        
+
         // Check if we've reached the fadeout point (pre-analyzed silent section)
         if (currentTrackFadeoutTimestamp > 0) {
             Double currentTime = (Double) status.get("time");
-            
+
             if (currentTime != null && currentTime >= currentTrackFadeoutTimestamp) {
                 if (App.DEBUG_MODE) {
-                    System.out.println("[DEBUG] MusicManager: Reached fadeout point at " + 
-                                     String.format("%.1f", currentTime) + "s (threshold: " + 
-                                     String.format("%.1f", currentTrackFadeoutTimestamp) + "s)");
+                    System.out.println("[DEBUG] MusicManager: Reached fadeout point at " +
+                            String.format("%.1f", currentTime) + "s (threshold: " +
+                            String.format("%.1f", currentTrackFadeoutTimestamp) + "s)");
                 }
                 System.out.println("[*] MusicManager: Fadeout detected, skipping to next song.");
                 return true;
@@ -400,11 +413,11 @@ public class MusicManager {
      */
     public void stopMusic() {
         System.out.println("[*] MusicManager: Stopping playback and disabling continuous mode.");
-        
+
         // Disable continuous playback
         isContinuousPlayEnabled = false;
         shouldStopMonitoring = true;
-        
+
         // Wait for the monitor thread to finish (with timeout)
         if (playbackMonitorThread != null && playbackMonitorThread.isAlive()) {
             try {
@@ -413,15 +426,16 @@ public class MusicManager {
                 System.err.println("[-] Interrupted waiting for playback monitor to stop.");
             }
         }
-        
+
         // Clear state
         currentTheme = null;
         currentlyPlayingFile = null;
         currentTrackFadeoutTimestamp = -1;
         playHistory.clear();
-        
-        // An empty list tells the LmsController to stop playback on ALL registered speakers
-        lmsController.stop(new ArrayList<>()); 
+
+        // An empty list tells the LmsController to stop playback on ALL registered
+        // speakers
+        lmsController.stop(new ArrayList<>());
     }
 
     /**
@@ -438,15 +452,16 @@ public class MusicManager {
         if (themeMap.containsKey(lowerQuery)) {
             ThemeDefinition theme = themeMap.get(lowerQuery);
             return library.stream()
-                .filter(track -> track.speed >= theme.minSpeed && track.speed <= theme.maxSpeed)
-                .filter(track -> evaluateLogicTags(track, theme.tags))
-                .collect(Collectors.toList());
+                    .filter(track -> track.speed >= theme.minSpeed && track.speed <= theme.maxSpeed)
+                    .filter(track -> evaluateLogicTags(track, theme.tags))
+                    .collect(Collectors.toList());
         }
 
-        // 2. Otherwise, do a direct search (e.g. if the user explicitly asked for "Jazz" or a specific title)
+        // 2. Otherwise, do a direct search (e.g. if the user explicitly asked for
+        // "Jazz" or a specific title)
         return library.stream()
-            .filter(track -> matchesSingleKeyword(track, lowerQuery))
-            .collect(Collectors.toList());
+                .filter(track -> matchesSingleKeyword(track, lowerQuery))
+                .collect(Collectors.toList());
     }
 
     /**
@@ -478,8 +493,10 @@ public class MusicManager {
             }
         }
 
-        // If there were any standard OR conditions provided, the track MUST match at least one.
-        // If there were ONLY AND/NOT conditions, we bypass this check (hasOrConditions will be false).
+        // If there were any standard OR conditions provided, the track MUST match at
+        // least one.
+        // If there were ONLY AND/NOT conditions, we bypass this check (hasOrConditions
+        // will be false).
         if (hasOrConditions && !matchedOrCondition) {
             return false;
         }
@@ -488,7 +505,8 @@ public class MusicManager {
     }
 
     /**
-     * Core matching logic: checks genres, moods, and title against a single raw keyword.
+     * Core matching logic: checks genres, moods, and title against a single raw
+     * keyword.
      */
     private boolean matchesSingleKeyword(Track track, String keyword) {
         if (track.genres != null && track.genres.stream().anyMatch(g -> g.toLowerCase().contains(keyword))) {

@@ -269,7 +269,8 @@ public class IntentParser {
         parameterMap.put("jazz", Arrays.asList("jazz", "jazzy", "smooth jazz"));
         parameterMap.put("active", Arrays.asList("active", "energetic", "upbeat", "workout", "pump up"));
         parameterMap.put("funk", Arrays.asList("funk", "funky", "groove"));
-        parameterMap.put("lofi", Arrays.asList("lofi", "chill", "study", "relaxing", "peaceful"));
+        parameterMap.put("lofi", Arrays.asList("lofi", "chill", "study"));
+        parameterMap.put("relaxing", Arrays.asList("relaxing", "peaceful", "soothing", "calm"));
         parameterMap.put("classical", Arrays.asList("classical", "orchestral", "symphony", "piano music"));
         parameterMap.put("rock", Arrays.asList("rock", "rock and roll", "guitar music"));
         parameterMap.put("hip hop", Arrays.asList("hip hop", "hip-hop", "rap", "rap music"));
@@ -307,7 +308,9 @@ public class IntentParser {
         String normalizedText = " " + rawText.toLowerCase() + " "; // Pad for easier word boundary matching
         normalizedText = normalizedText.replaceAll("turned", "turn").replaceAll("played", "play")
                 .replaceAll("playful music", "play some music").replaceAll("place music", "play some music")
-                .replaceAll("place the music", "play some music").replaceAll("please show music", "play some music")
+                .replaceAll("pleasure music", "play some music")
+                .replaceAll("place the music", "play some music").replaceAll("please music", "play some music")
+                .replaceAll("please show music", "play some music")
                 .replaceAll("play acted music", "play active music")
                 .replaceAll("play acted music", "they active music");
 

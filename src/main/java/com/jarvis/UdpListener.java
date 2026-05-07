@@ -133,7 +133,8 @@ public class UdpListener implements Runnable {
 
                             String[] jarvisPhonetics = { "jarvis", "jervis", "darvish", "dervish", "garbage", "jurgen",
                                     "drivers", "travis", "harvest", "journalist", "german", "germans", "jarred",
-                                    "your this", "this", "jerks" };
+                                    "target",
+                                    "judge", "your this", "this", "jerks" };
 
                             String jarvisRegex = "(?i)\\b(";
                             for (int i = 0; i < jarvisPhonetics.length - 1; i++) {

@@ -452,10 +452,23 @@ public class AudioAnalyzer {
         // Use a rolling average to smooth out noise
         int windowSize = Math.max(1, (int) (sampleRate / 2000)); // ~500ms window
 
-        // Calculate how many volume samples we need for sustained duration
-        int samplesNeededForSustained = (int) (SUSTAINED_LOW_VOLUME_DURATION * sampleRate / SAMPLE_BUFFER_SIZE);
+        // Calculate how many volume level entries we need for sustained duration
+        // volumeLevels represents the 8-second fadeout window, so we need to scale
+        // appropriately
+        // Require 2 seconds of low volume out of the 8-second analysis window
+        int samplesNeededForSustained = Math.max(1,
+                (int) (volumeLevels.size() * SUSTAINED_LOW_VOLUME_DURATION / FADEOUT_ANALYSIS_WINDOW_SECONDS));
         int consecutiveLowVolumeSamples = 0;
         int fadeoutStartIndex = -1;
+
+        if (App.DEBUG_MODE) {
+            System.out.println("[DEBUG] AudioAnalyzer.findFadeoutPoint: volumeLevels.size()=" + volumeLevels.size() +
+                    ", samplesNeededForSustained=" + samplesNeededForSustained +
+                    " (~"
+                    + String.format("%.1f",
+                            samplesNeededForSustained * FADEOUT_ANALYSIS_WINDOW_SECONDS / volumeLevels.size())
+                    + " seconds)");
+        }
 
         for (int i = 0; i < volumeLevels.size(); i++) {
             float rollingAverage = 0;

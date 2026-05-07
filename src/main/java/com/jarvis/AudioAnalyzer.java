@@ -342,10 +342,10 @@ public class AudioAnalyzer {
         // Find where volume drops below 5% of the OVERALL song average (not the local
         // window average)
         float volumeThreshold = overallAverageVolume * LOW_VOLUME_RATIO;
-        int fadeoutFrameIndex = findFadeoutPoint(fadeoutWindowVolumeLevels, volumeThreshold, analysisStartSeconds,
+        int fadeoutBufferIndex = findFadeoutPoint(fadeoutWindowVolumeLevels, volumeThreshold, analysisStartSeconds,
                 sampleRate);
 
-        if (fadeoutFrameIndex < 0) {
+        if (fadeoutBufferIndex < 0) {
             if (App.DEBUG_MODE) {
                 System.out.println("[DEBUG] AudioAnalyzer: No fadeout detected (overall avg=" +
                         String.format("%.2f", overallAverageVolume) + ", threshold=" +
@@ -354,7 +354,10 @@ public class AudioAnalyzer {
             return null;
         }
 
-        float fadeoutTimestamp = (fadeoutFrameIndex / sampleRate);
+        // Calculate the timestamp by figuring out how far into the 8-second array we
+        // got
+        float windowProgressRatio = (float) fadeoutBufferIndex / fadeoutWindowVolumeLevels.size();
+        float fadeoutTimestamp = analysisStartSeconds + (windowProgressRatio * FADEOUT_ANALYSIS_WINDOW_SECONDS);
 
         if (App.DEBUG_MODE) {
             System.out.println("[DEBUG] AudioAnalyzer: Fadeout detected at " +
@@ -509,7 +512,7 @@ public class AudioAnalyzer {
                         System.out.println("[DEBUG]   Sustained low volume confirmed after "
                                 + consecutiveLowVolumeSamples + " samples");
                     }
-                    return (int) (analysisStartSeconds * sampleRate) + fadeoutStartIndex;
+                    return fadeoutStartIndex;
                 }
             } else {
                 // Volume went back up - reset the counter

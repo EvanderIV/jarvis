@@ -135,7 +135,7 @@ public class UdpListener implements Runnable {
                                     "jurgen",
                                     "drivers", "travis", "harvest", "journalist", "german", "germans", "jarred",
                                     "target",
-                                    "judge", "your this", "this", "jerks" };
+                                    "judge", "your this", "this", "jerks", "service" };
 
                             String jarvisRegex = "(?i)\\b(";
                             for (int i = 0; i < jarvisPhonetics.length - 1; i++) {

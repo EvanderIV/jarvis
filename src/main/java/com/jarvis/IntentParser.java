@@ -123,10 +123,11 @@ public class IntentParser {
      */
     private String extractTimerParameter(String normalizedText) {
         String[] timeKeywords = { "minute", "minutes", "sec", "secs", "second", "seconds", "hour", "hours" };
-        String[] numberWords = { "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
-                "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
-                "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
-                "sixty" };
+        // String[] numberWords = { "zero", "one", "two", "three", "four", "five",
+        // "six", "seven", "eight", "nine",
+        // "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+        // "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
+        // "sixty" };
 
         // Split text into words
         String[] words = normalizedText.toLowerCase().split("\\s+");
@@ -308,11 +309,14 @@ public class IntentParser {
         String normalizedText = " " + rawText.toLowerCase() + " "; // Pad for easier word boundary matching
         normalizedText = normalizedText.replaceAll("turned", "turn").replaceAll("played", "play")
                 .replaceAll("playful music", "play some music").replaceAll("place music", "play some music")
+                .replaceAll("place and music", "play some music").replaceAll("place the music", "play some music")
                 .replaceAll("pleasure music", "play some music")
                 .replaceAll("place the music", "play some music").replaceAll("please music", "play some music")
+                .replaceAll("pleasant music", "play some music")
                 .replaceAll("please show music", "play some music")
                 .replaceAll("play acted music", "play active music")
-                .replaceAll("play acted music", "they active music");
+                .replaceAll("play acted music", "they active music")
+                .replaceAll("question music", "they active music");
 
         Action foundAction = Action.UNKNOWN;
         Target foundTarget = Target.UNKNOWN;

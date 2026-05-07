@@ -17,7 +17,7 @@ public class AudioAnalyzer {
 
     // Configuration constants
     private static final float LOW_VOLUME_RATIO = 0.15f; // Skip if volume drops below 15% of average
-    private static final float FADEOUT_ANALYSIS_WINDOW_SECONDS = 8.0f; // Only analyze the last 8 seconds of the song
+    private static final float FADEOUT_ANALYSIS_WINDOW_SECONDS = 12.0f; // Only analyze the last 8 seconds of the song
     private static final float SUSTAINED_LOW_VOLUME_DURATION = 2.0f; // Require at least 2 seconds of sustained low
                                                                      // volume to trigger fadeout private static final
     static int SAMPLE_BUFFER_SIZE = 4096; // Number of bytes to read at a time

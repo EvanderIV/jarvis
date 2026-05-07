@@ -15,7 +15,7 @@
     <property name="sun.java.launcher" value="SUN_STANDARD"/>
     <property name="user.country" value="US"/>
     <property name="sun.boot.library.path" value="C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot\bin"/>
-    <property name="sun.java.command" value="C:\Users\evanm\AppData\Local\Temp\surefire4132894045875107481\surefirebooter17435096618031947859.jar C:\Users\evanm\AppData\Local\Temp\surefire4132894045875107481 2026-05-07T01-04-40_002-jvmRun1 surefire9881616286089152951tmp surefire_08499447658642815087tmp"/>
+    <property name="sun.java.command" value="C:\Users\evanm\AppData\Local\Temp\surefire13004225393364951449\surefirebooter6594348916408119348.jar C:\Users\evanm\AppData\Local\Temp\surefire13004225393364951449 2026-05-07T01-06-41_543-jvmRun1 surefire233079390313191865tmp surefire_012547007226543214413tmp"/>
     <property name="jdk.debug" value="release"/>
     <property name="surefire.test.class.path" value="C:\Users\evanm\Documents\jarvis\target\test-classes;C:\Users\evanm\Documents\jarvis\target\classes;C:\Users\evanm\.m2\repository\junit\junit\4.11\junit-4.11.jar;C:\Users\evanm\.m2\repository\org\hamcrest\hamcrest-core\1.3\hamcrest-core-1.3.jar;C:\Users\evanm\.m2\repository\com\google\code\gson\gson\2.10.1\gson-2.10.1.jar;C:\Users\evanm\.m2\repository\com\alphacephei\vosk\0.3.45\vosk-0.3.45.jar;C:\Users\evanm\.m2\repository\net\java\dev\jna\jna\5.13.0\jna-5.13.0.jar;"/>
     <property name="sun.cpu.endian" value="little"/>
@@ -30,7 +30,7 @@
     <property name="line.separator" value="&#10;"/>
     <property name="java.vm.specification.vendor" value="Oracle Corporation"/>
     <property name="java.specification.name" value="Java Platform API Specification"/>
-    <property name="surefire.real.class.path" value="C:\Users\evanm\AppData\Local\Temp\surefire4132894045875107481\surefirebooter17435096618031947859.jar"/>
+    <property name="surefire.real.class.path" value="C:\Users\evanm\AppData\Local\Temp\surefire13004225393364951449\surefirebooter6594348916408119348.jar"/>
     <property name="user.script" value=""/>
     <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
     <property name="java.runtime.version" value="25.0.2+10-LTS"/>
@@ -60,5 +60,5 @@
     <property name="sun.io.unicode.encoding" value="UnicodeLittle"/>
     <property name="java.class.version" value="69.0"/>
   </properties>
-  <testcase name="shouldAnswerWithTrue" classname="com.jarvis.AppTest" time="0.003"/>
+  <testcase name="shouldAnswerWithTrue" classname="com.jarvis.AppTest" time="0.002"/>
 </testsuite>

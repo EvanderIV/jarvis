@@ -191,6 +191,13 @@ public class LmsController {
         return status;
     }
 
+    /**
+     * Gets all registered speaker MAC addresses as a list.
+     */
+    public List<String> getAllRegisteredSpeakers() {
+        return new ArrayList<>(registeredSpeakers.keySet());
+    }
+
     // --- Helper Methods ---
 
     private void setMuteState(List<String> targetMacs, boolean isMuted) {

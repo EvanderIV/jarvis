@@ -35,6 +35,10 @@ public class MusicManager {
     private List<String> targetMacs = new ArrayList<>();
     private String currentlyPlayingFile = null;
     private long lastTrackStartTime = 0;
+    private double lastPlaybackTime = 0;
+    private int stallCheckCount = 0;
+    private static final int STALL_THRESHOLD = 2; // Number of checks before considering it stalled
+    private static final double SILENCE_POSITION_THRESHOLD = 0.9; // 90% through song
     private Thread playbackMonitorThread = null;
     private volatile boolean isContinuousPlayEnabled = false;
     private volatile boolean shouldStopMonitoring = false;
@@ -218,6 +222,8 @@ public class MusicManager {
         // 6. Command LMS to play the file
         currentlyPlayingFile = fullPath;
         lastTrackStartTime = System.currentTimeMillis();
+        lastPlaybackTime = 0;
+        stallCheckCount = 0;
         
         lmsController.unmute(targetMacs);
         lmsController.playFile(targetMacs, fullPath);
@@ -278,9 +284,10 @@ public class MusicManager {
     /**
      * Detects if the currently playing track has finished.
      * Queries LMS status to check if playback has stopped or moved to a new file.
+     * Also detects fadeout/silence in the last 10% of the song.
      */
     private boolean hasTrackFinished() {
-        if (currentlyPlayingFile == null || targetMacs.isEmpty()) {
+        if (currentlyPlayingFile == null) {
             return false;
         }
 
@@ -291,8 +298,19 @@ public class MusicManager {
             return false;
         }
 
-        // Query the first target speaker for playback status
-        String firstSpeaker = targetMacs.get(0);
+        // If targetMacs is empty, resolve to all registered speakers
+        List<String> speakersToCheck = targetMacs;
+        if (speakersToCheck.isEmpty()) {
+            speakersToCheck = lmsController.getAllRegisteredSpeakers();
+        }
+        
+        // If we still have no speakers to check, can't determine status
+        if (speakersToCheck.isEmpty()) {
+            return false;
+        }
+
+        // Query the first available speaker for playback status
+        String firstSpeaker = speakersToCheck.get(0);
         Map<String, Object> status = lmsController.getPlaybackStatus(firstSpeaker);
         
         if (status.isEmpty()) {
@@ -311,6 +329,37 @@ public class MusicManager {
         String currentFile = (String) status.get("currentFile");
         if (currentFile != null && !currentlyPlayingFile.contains(currentFile)) {
             return true;
+        }
+
+        // Check for fadeout/silence in the last 10% of the song
+        Double duration = (Double) status.get("duration");
+        Double currentTime = (Double) status.get("time");
+        
+        if (duration != null && duration > 0 && currentTime != null) {
+            double positionRatio = currentTime / duration;
+            
+            // If we're in the last 10% of the song
+            if (positionRatio >= SILENCE_POSITION_THRESHOLD) {
+                // Check if playback position has stalled (no advancement)
+                double timeDelta = Math.abs(currentTime - lastPlaybackTime);
+                
+                if (timeDelta < 0.5) { // Less than 500ms advancement since last check
+                    stallCheckCount++;
+                    if (stallCheckCount >= STALL_THRESHOLD) {
+                        System.out.println("[*] MusicManager: Detected fadeout/silence at " + 
+                                         String.format("%.1f%%", positionRatio * 100) + 
+                                         " of track. Skipping to next song.");
+                        stallCheckCount = 0;
+                        return true;
+                    }
+                } else {
+                    stallCheckCount = 0; // Reset if time is advancing
+                }
+            } else {
+                stallCheckCount = 0; // Reset if not in final 10%
+            }
+            
+            lastPlaybackTime = currentTime;
         }
 
         return false;
@@ -338,6 +387,8 @@ public class MusicManager {
         // Clear state
         currentTheme = null;
         currentlyPlayingFile = null;
+        lastPlaybackTime = 0;
+        stallCheckCount = 0;
         playHistory.clear();
         
         // An empty list tells the LmsController to stop playback on ALL registered speakers

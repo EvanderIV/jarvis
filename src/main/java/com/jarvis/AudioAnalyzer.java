@@ -117,14 +117,15 @@ public class AudioAnalyzer {
             String fileExt = getFileExtension(filePath);
             System.out.println("[*] AudioAnalyzer: Converting ." + fileExt + " to WAV for analysis...");
             
-            String tempWavPath = convertToWav(filePath);
-            if (tempWavPath == null) {
-                // Conversion failed
-                fadeoutCache.put(filePath, null);
-                return null;
-            }
-            
+            String tempWavPath = null;
             try {
+                tempWavPath = convertToWav(filePath);
+                if (tempWavPath == null) {
+                    // Conversion failed
+                    fadeoutCache.put(filePath, null);
+                    return null;
+                }
+                
                 // Analyze the temporary WAV file
                 FadeoutInfo result = performAnalysis(tempWavPath);
                 
@@ -141,15 +142,17 @@ public class AudioAnalyzer {
                 fadeoutCache.put(filePath, null);
                 return null;
             } finally {
-                // Always clean up the temporary WAV file
-                File tempFile = new File(tempWavPath);
-                if (tempFile.exists()) {
-                    if (tempFile.delete()) {
-                        if (App.DEBUG_MODE) {
-                            System.out.println("[DEBUG] AudioAnalyzer: Deleted temporary WAV file");
+                // Always clean up the temporary WAV file (if conversion succeeded)
+                if (tempWavPath != null) {
+                    File tempFile = new File(tempWavPath);
+                    if (tempFile.exists()) {
+                        if (tempFile.delete()) {
+                            if (App.DEBUG_MODE) {
+                                System.out.println("[DEBUG] AudioAnalyzer: Deleted temporary WAV file");
+                            }
+                        } else {
+                            System.err.println("[-] AudioAnalyzer: Could not delete temporary WAV file: " + tempWavPath);
                         }
-                    } else {
-                        System.err.println("[-] AudioAnalyzer: Could not delete temporary WAV file: " + tempWavPath);
                     }
                 }
             }
@@ -165,53 +168,70 @@ public class AudioAnalyzer {
      * Returns the path to the temporary WAV file, or null if conversion fails.
      */
     private static String convertToWav(String sourcePath) {
+        File sourceFile = new File(sourcePath);
+        if (!sourceFile.exists()) {
+            System.err.println("[-] AudioAnalyzer: Source file not found: " + sourcePath);
+            return null;
+        }
+        
+        String tempPath = sourcePath + ".analysis.wav";
+        File tempWavFile = new File(tempPath);
+        
+        AudioInputStream sourceStream = null;
         try {
-            File sourceFile = new File(sourcePath);
-            if (!sourceFile.exists()) {
-                System.err.println("[-] AudioAnalyzer: Source file not found: " + sourcePath);
-                return null;
-            }
+            // Try to read the source audio
+            sourceStream = AudioSystem.getAudioInputStream(sourceFile);
+            AudioFormat sourceFormat = sourceStream.getFormat();
             
-            // Create temp WAV file in the same directory
-            String tempPath = sourcePath + ".analysis.wav";
-            File tempWavFile = new File(tempPath);
+            // Convert to standard WAV format (PCM, 44.1kHz, 16-bit, mono/stereo)
+            AudioFormat wavFormat = new AudioFormat(
+                AudioFormat.Encoding.PCM_SIGNED,
+                44100,                           // Sample rate
+                16,                              // Sample size in bits
+                sourceFormat.getChannels(),      // Keep original channel count
+                sourceFormat.getChannels() * 2,  // Frame size
+                44100,                           // Frame rate
+                false                            // Little endian
+            );
             
-            // Read the source audio
-            try (AudioInputStream sourceStream = AudioSystem.getAudioInputStream(sourceFile)) {
-                AudioFormat sourceFormat = sourceStream.getFormat();
+            // Convert and write to temporary WAV
+            try (AudioInputStream convertedStream = AudioSystem.getAudioInputStream(wavFormat, sourceStream)) {
+                int bytesWritten = AudioSystem.write(convertedStream, javax.sound.sampled.AudioFileFormat.Type.WAVE, tempWavFile);
                 
-                // Convert to standard WAV format (PCM, 44.1kHz, 16-bit, mono/stereo)
-                AudioFormat wavFormat = new AudioFormat(
-                    AudioFormat.Encoding.PCM_SIGNED,
-                    44100,                           // Sample rate
-                    16,                              // Sample size in bits
-                    sourceFormat.getChannels(),      // Keep original channel count
-                    sourceFormat.getChannels() * 2,  // Frame size
-                    44100,                           // Frame rate
-                    false                            // Little endian
-                );
-                
-                // Convert and write to temporary WAV
-                try (AudioInputStream convertedStream = AudioSystem.getAudioInputStream(wavFormat, sourceStream)) {
-                    int bytesWritten = AudioSystem.write(convertedStream, javax.sound.sampled.AudioFileFormat.Type.WAVE, tempWavFile);
-                    
-                    if (bytesWritten > 0) {
-                        if (App.DEBUG_MODE) {
-                            System.out.println("[DEBUG] AudioAnalyzer: Converted to WAV (" + bytesWritten + " bytes)");
-                        }
-                        return tempPath;
-                    } else {
-                        System.err.println("[-] AudioAnalyzer: No bytes written during conversion");
-                        if (tempWavFile.exists()) {
-                            tempWavFile.delete();
-                        }
-                        return null;
+                if (bytesWritten > 0) {
+                    if (App.DEBUG_MODE) {
+                        System.out.println("[DEBUG] AudioAnalyzer: Converted to WAV (" + bytesWritten + " bytes)");
                     }
+                    return tempPath;
+                } else {
+                    System.err.println("[-] AudioAnalyzer: No bytes written during conversion");
+                    if (tempWavFile.exists()) {
+                        tempWavFile.delete();
+                    }
+                    return null;
                 }
             }
+        } catch (javax.sound.sampled.UnsupportedAudioFileException e) {
+            System.err.println("[-] AudioAnalyzer: Cannot convert - format not supported by system: " + e.getMessage());
+            if (tempWavFile.exists()) {
+                tempWavFile.delete();
+            }
+            return null;
         } catch (Exception e) {
             System.err.println("[-] AudioAnalyzer: Conversion to WAV failed: " + e.getMessage());
+            if (tempWavFile.exists()) {
+                tempWavFile.delete();
+            }
             return null;
+        } finally {
+            // Close the source stream if it was opened
+            if (sourceStream != null) {
+                try {
+                    sourceStream.close();
+                } catch (Exception e) {
+                    System.err.println("[-] AudioAnalyzer: Error closing source stream: " + e.getMessage());
+                }
+            }
         }
     }
     

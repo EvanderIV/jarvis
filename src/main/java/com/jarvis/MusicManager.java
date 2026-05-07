@@ -153,7 +153,7 @@ public class MusicManager {
     }
 
     /**
-     * Finds a matching track, un-mutes the speakers, and instructs LMS to play it.
+     * Finds a matching track and instructs LMS to play it.
      * Also enables continuous playback within the same theme.
      */
     public void playMusic(String parameter, List<String> targetMacs) {
@@ -237,7 +237,8 @@ public class MusicManager {
         lastTrackStartTime = System.currentTimeMillis();
         currentTrackFadeoutTimestamp = -1; // Mark as "not yet analyzed"
 
-        lmsController.unmute(targetMacs);
+        // lmsController.unmute(targetMacs); // Pause functionality already prevents
+        // sound output
 
         // Restore saved volume for each speaker
         for (String mac : targetMacs) {
@@ -429,17 +430,18 @@ public class MusicManager {
         System.out.println("[*] MusicManager: Stopping playback and disabling continuous mode.");
 
         // Save the current volume from all target speakers before stopping
-        List<String> speakersToCheck = targetMacs;
-        if (speakersToCheck.isEmpty()) {
-            speakersToCheck = lmsController.getAllRegisteredSpeakers();
-        }
-        for (String mac : speakersToCheck) {
-            int volume = lmsController.getVolume(mac);
-            if (volume >= 0) {
-                savedVolumes.put(mac, volume);
-                System.out.println("[*] MusicManager: Saved volume " + volume + "% for " + mac);
-            }
-        }
+        // List<String> speakersToCheck = targetMacs;
+        // if (speakersToCheck.isEmpty()) {
+        // speakersToCheck = lmsController.getAllRegisteredSpeakers();
+        // }
+        // for (String mac : speakersToCheck) {
+        // int volume = lmsController.getVolume(mac);
+        // if (volume >= 0) {
+        // savedVolumes.put(mac, volume);
+        // System.out.println("[*] MusicManager: Saved volume " + volume + "% for " +
+        // mac);
+        // }
+        // }
 
         // Disable continuous playback
         isContinuousPlayEnabled = false;

@@ -16,8 +16,8 @@ import java.util.List;
 public class AudioAnalyzer {
     
     // Configuration constants
-    private static final float LOW_VOLUME_RATIO = 0.25f;      // Skip if volume drops below 25% of average
-    private static final float ANALYSIS_WINDOW_PERCENT = 0.25f; // Only analyze the last 25% of the song
+    private static final float LOW_VOLUME_RATIO = 0.15f;      // Skip if volume drops below 15% of average
+    private static final float FADEOUT_ANALYSIS_WINDOW_SECONDS = 8.0f; // Only analyze the last 8 seconds of the song
     private static final int SAMPLE_BUFFER_SIZE = 4096;        // Number of bytes to read at a time
     
     // Cached fadeout info to avoid re-analyzing the same file
@@ -291,7 +291,7 @@ public class AudioAnalyzer {
         // Calculate duration and analysis window
         float sampleRate = audioFormat.getSampleRate();
         float durationSeconds = frameLength / sampleRate;
-        float analysisStartSeconds = durationSeconds * (1 - ANALYSIS_WINDOW_PERCENT);
+        float analysisStartSeconds = Math.max(0, durationSeconds - FADEOUT_ANALYSIS_WINDOW_SECONDS);
         
         if (App.DEBUG_MODE) {
             System.out.println("[DEBUG] AudioAnalyzer: File: " + filePath);

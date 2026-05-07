@@ -15,7 +15,7 @@ public class App {
         try {
             // 1. Build the Engine (Centralized Controllers)
             // Pointing to eminich.com ensures it connects to your remote Linux server 
-            LmsController lmsController = new LmsController("eminich.com");
+            LmsController lmsController = new LmsController("127.0.0.1");
             MusicManager musicManager = new MusicManager(lmsController);
             CommandFulfiller fulfiller = new CommandFulfiller(musicManager, lmsController);
             

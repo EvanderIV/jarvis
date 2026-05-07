@@ -7,15 +7,18 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MusicManager {
 
     private final String MUSIC_DIR = "/home/evanm/Music/jarvis-music/"; 
     private final String INDEX_FILE = "music.json"; 
+    private static final int MAX_HISTORY_SIZE = 50;
 
     private final LmsController lmsController;
     private final Gson gson;
@@ -25,6 +28,16 @@ public class MusicManager {
     private final Map<String, ThemeDefinition> themeMap = new HashMap<>();
     
     private final Random random = new Random();
+    
+    // Continuous playback state
+    private String currentTheme = null;
+    private final Set<String> playHistory = new LinkedHashSet<>();
+    private List<String> targetMacs = new ArrayList<>();
+    private String currentlyPlayingFile = null;
+    private long lastTrackStartTime = 0;
+    private Thread playbackMonitorThread = null;
+    private volatile boolean isContinuousPlayEnabled = false;
+    private volatile boolean shouldStopMonitoring = false;
 
     // --- Data Model for JSON Parsing ---
     
@@ -92,7 +105,7 @@ public class MusicManager {
         themeMap.put("wakeup",     new ThemeDefinition(new String[]{"Wakeup", "Happy", "Upbeat", "Uplifting", "-Somber"}, 2, 3));
         
         // "fancy_restaurant": Dinner/elegant music (Smooth, unobtrusive, Low Speed)
-        themeMap.put("fancy_restaurant", new ThemeDefinition(new String[]{"Jazz", "Piano", "Relaxing", "Relaxed", "-Epic", "-Tense", "-Driven", "-Wakeup", "-Upbeat", "-Somber"}, 0, 2));
+        themeMap.put("fancy_restaurant", new ThemeDefinition(new String[]{"+Jazz", "Piano", "Relaxing", "Relaxed", "-Epic", "-Tense", "-Driven", "-Wakeup", "-Upbeat", "-Somber"}, 0, 2));
     }
 
     /**
@@ -126,6 +139,7 @@ public class MusicManager {
 
     /**
      * Finds a matching track, un-mutes the speakers, and instructs LMS to play it.
+     * Also enables continuous playback within the same theme.
      */
     public void playMusic(String parameter, List<String> targetMacs) {
         if (library.isEmpty()) {
@@ -133,31 +147,201 @@ public class MusicManager {
             return;
         }
 
-        // 1. Find matching tracks based on the Intent parameter
-        List<Track> matches = findTracks(parameter);
-        if (matches.isEmpty()) {
-            System.out.println("[-] No tracks found matching: " + parameter + ". Defaulting to random.");
-            matches = library; 
-        }
+        // Initialize continuous playback state
+        this.currentTheme = parameter != null ? parameter : "default";
+        this.targetMacs = new ArrayList<>(targetMacs);
+        this.playHistory.clear();
+        this.isContinuousPlayEnabled = true;
+        this.shouldStopMonitoring = false;
 
-        // 2. Pick a random track from the matches
-        Track selectedTrack = matches.get(random.nextInt(matches.size()));
-        String fullPath = Paths.get(MUSIC_DIR, selectedTrack.file).toString();
-        
-        System.out.println("[*] MusicManager: Selected '" + selectedTrack.title + "' for query: " + parameter);
+        // Start or restart the playback monitor thread
+        startPlaybackMonitor();
 
-        // 3. Command LMS to play the file natively
-        lmsController.unmute(targetMacs); 
-        lmsController.playFile(targetMacs, fullPath); 
+        // Play the first track
+        playNextTrack();
     }
 
     /**
-     * Stops currently playing music.
+     * Plays the next track from the current theme, respecting play history to avoid repeats.
+     * If all tracks have been played, resets history (keeping only the most recent track).
+     */
+    private void playNextTrack() {
+        if (!isContinuousPlayEnabled || currentTheme == null) {
+            return;
+        }
+
+        if (library.isEmpty()) {
+            System.out.println("[-] Cannot play music, library is empty.");
+            return;
+        }
+
+        // 1. Find matching tracks based on the current theme
+        List<Track> matches = findTracks(currentTheme);
+        if (matches.isEmpty()) {
+            System.out.println("[-] No tracks found matching theme: " + currentTheme + ". Defaulting to random.");
+            matches = library; 
+        }
+
+        // 2. Filter out tracks that are in the history
+        List<Track> availableTracks = matches.stream()
+            .filter(track -> !playHistory.contains(track.file))
+            .collect(Collectors.toList());
+
+        // 3. If all tracks have been played, reset history (keep only the most recent)
+        if (availableTracks.isEmpty()) {
+            if (!playHistory.isEmpty() && currentlyPlayingFile != null) {
+                System.out.println("[*] MusicManager: All tracks exhausted, resetting history (keeping most recent).");
+                playHistory.clear();
+                playHistory.add(currentlyPlayingFile);
+                
+                // Re-filter for available tracks
+                availableTracks = matches.stream()
+                    .filter(track -> !playHistory.contains(track.file))
+                    .collect(Collectors.toList());
+            }
+            
+            // If still no available tracks, allow all
+            if (availableTracks.isEmpty()) {
+                availableTracks = matches;
+            }
+        }
+
+        // 4. Pick a random track from available matches
+        Track selectedTrack = availableTracks.get(random.nextInt(availableTracks.size()));
+        String fullPath = Paths.get(MUSIC_DIR, selectedTrack.file).toString();
+        
+        System.out.println("[*] MusicManager: Selected '" + selectedTrack.title + "' for theme: " + currentTheme);
+
+        // 5. Add to history
+        addToHistory(selectedTrack.file);
+
+        // 6. Command LMS to play the file
+        currentlyPlayingFile = fullPath;
+        lastTrackStartTime = System.currentTimeMillis();
+        
+        lmsController.unmute(targetMacs);
+        lmsController.playFile(targetMacs, fullPath);
+    }
+
+    /**
+     * Adds a track to the play history, enforcing the max size limit.
+     */
+    private void addToHistory(String trackFile) {
+        playHistory.add(trackFile);
+        
+        // Enforce max history size by removing the oldest entry
+        if (playHistory.size() > MAX_HISTORY_SIZE) {
+            // LinkedHashSet maintains insertion order, so remove the first (oldest) element
+            playHistory.remove(playHistory.iterator().next());
+        }
+    }
+
+    /**
+     * Starts a background thread that monitors playback status and queues the next track
+     * when the current one finishes.
+     */
+    private void startPlaybackMonitor() {
+        // If a monitor thread is already running, don't start a new one
+        if (playbackMonitorThread != null && playbackMonitorThread.isAlive()) {
+            return;
+        }
+
+        playbackMonitorThread = new Thread(() -> {
+            System.out.println("[*] MusicManager: Playback monitor started.");
+            
+            while (!shouldStopMonitoring && isContinuousPlayEnabled) {
+                try {
+                    Thread.sleep(2000); // Check every 2 seconds
+
+                    if (shouldStopMonitoring || !isContinuousPlayEnabled) {
+                        break;
+                    }
+
+                    // Check if current track has finished playing
+                    if (hasTrackFinished()) {
+                        System.out.println("[*] MusicManager: Current track finished, queuing next...");
+                        playNextTrack();
+                    }
+                } catch (InterruptedException e) {
+                    System.out.println("[*] MusicManager: Playback monitor interrupted.");
+                    break;
+                }
+            }
+            
+            System.out.println("[*] MusicManager: Playback monitor stopped.");
+        }, "MusicPlaybackMonitor");
+        
+        playbackMonitorThread.setDaemon(true);
+        playbackMonitorThread.start();
+    }
+
+    /**
+     * Detects if the currently playing track has finished.
+     * Queries LMS status to check if playback has stopped or moved to a new file.
+     */
+    private boolean hasTrackFinished() {
+        if (currentlyPlayingFile == null || targetMacs.isEmpty()) {
+            return false;
+        }
+
+        // Give at least 2 seconds before considering a track finished
+        // (to avoid rapid re-queueing at start of playback)
+        long elapsedTime = System.currentTimeMillis() - lastTrackStartTime;
+        if (elapsedTime < 2000) {
+            return false;
+        }
+
+        // Query the first target speaker for playback status
+        String firstSpeaker = targetMacs.get(0);
+        Map<String, Object> status = lmsController.getPlaybackStatus(firstSpeaker);
+        
+        if (status.isEmpty()) {
+            // If we can't get status, assume playback hasn't finished
+            return false;
+        }
+
+        String mode = (String) status.get("mode");
+        
+        // If the player is stopped, the track has finished
+        if ("stop".equals(mode)) {
+            return true;
+        }
+
+        // If the player has switched to a different file, the track has finished
+        String currentFile = (String) status.get("currentFile");
+        if (currentFile != null && !currentlyPlayingFile.contains(currentFile)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Stops currently playing music and disables continuous playback.
      */
     public void stopMusic() {
-        System.out.println("[*] MusicManager: Stopping playback.");
+        System.out.println("[*] MusicManager: Stopping playback and disabling continuous mode.");
+        
+        // Disable continuous playback
+        isContinuousPlayEnabled = false;
+        shouldStopMonitoring = true;
+        
+        // Wait for the monitor thread to finish (with timeout)
+        if (playbackMonitorThread != null && playbackMonitorThread.isAlive()) {
+            try {
+                playbackMonitorThread.join(3000); // Wait up to 3 seconds
+            } catch (InterruptedException e) {
+                System.err.println("[-] Interrupted waiting for playback monitor to stop.");
+            }
+        }
+        
+        // Clear state
+        currentTheme = null;
+        currentlyPlayingFile = null;
+        playHistory.clear();
+        
         // An empty list tells the LmsController to stop playback on ALL registered speakers
-        lmsController.stop(new ArrayList<>());
+        lmsController.stop(new ArrayList<>()); 
     }
 
     /**

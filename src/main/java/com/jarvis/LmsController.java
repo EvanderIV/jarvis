@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -164,6 +165,30 @@ public class LmsController {
             System.out.println("  (All connected speakers are registered)");
         }
         System.out.println("---------------------------\n");
+    }
+
+    /**
+     * Gets the current playback status of a player.
+     * Returns a map containing playback info: "isPlaying", "currentFile", "duration", "time", etc.
+     */
+    public Map<String, Object> getPlaybackStatus(String playerId) {
+        Map<String, Object> status = new HashMap<>();
+        JsonObject response = sendRpcRequest(playerId, Arrays.asList("status"));
+        
+        if (response != null && response.has("result")) {
+            JsonObject result = response.getAsJsonObject("result");
+            status.put("isPlaying", result.has("can_seek") && !result.get("mode").getAsString().equals("stop"));
+            status.put("currentFile", result.has("current_title") ? result.get("current_title").getAsString() : null);
+            status.put("mode", result.has("mode") ? result.get("mode").getAsString() : "stop");
+            if (result.has("duration")) {
+                status.put("duration", result.get("duration").getAsDouble());
+            }
+            if (result.has("time")) {
+                status.put("time", result.get("time").getAsDouble());
+            }
+        }
+        
+        return status;
     }
 
     // --- Helper Methods ---

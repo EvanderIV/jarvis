@@ -3,6 +3,7 @@ package com.jarvis;
 import java.io.ByteArrayOutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 
 import org.vosk.Model;
@@ -68,19 +69,31 @@ public class UdpListener implements Runnable {
                     System.out.println("[*] Listening for raw PCM audio stream...");
                     ByteArrayOutputStream audioStreamBuffer = new ByteArrayOutputStream();
                     
-                    while (running) {
-                        DatagramPacket audioPacket = new DatagramPacket(buffer, buffer.length);
-                        socket.receive(audioPacket);
-                        
-                        // Check if this packet is the EOF signal instead of audio data
-                        String possibleEof = new String(audioPacket.getData(), 0, audioPacket.getLength(), StandardCharsets.UTF_8);
-                        if (possibleEof.equals("STREAM_EOF")) {
-                            System.out.println("[+] Received STREAM_EOF.");
-                            break; // Break out of the audio loop, go back to waiting for triggers
+                    // Set a 7-second timeout for audio reception
+                    // (commands are typically much shorter than this)
+                    int previousTimeout = socket.getSoTimeout();
+                    socket.setSoTimeout(7000);
+                    
+                    try {
+                        while (running) {
+                            DatagramPacket audioPacket = new DatagramPacket(buffer, buffer.length);
+                            socket.receive(audioPacket);
+                            
+                            // Check if this packet is the EOF signal instead of audio data
+                            String possibleEof = new String(audioPacket.getData(), 0, audioPacket.getLength(), StandardCharsets.UTF_8);
+                            if (possibleEof.equals("STREAM_EOF")) {
+                                System.out.println("[+] Received STREAM_EOF.");
+                                break; // Break out of the audio loop, go back to waiting for triggers
+                            }
+                            
+                            // Otherwise, it's raw audio bytes. Write them to our in-memory buffer.
+                            audioStreamBuffer.write(audioPacket.getData(), 0, audioPacket.getLength());
                         }
-                        
-                        // Otherwise, it's raw audio bytes. Write them to our in-memory buffer.
-                        audioStreamBuffer.write(audioPacket.getData(), 0, audioPacket.getLength());
+                    } catch (SocketTimeoutException e) {
+                        System.out.println("[*] Audio stream timeout (7 seconds elapsed). Stopping audio capture.");
+                    } finally {
+                        // Restore the original socket timeout
+                        socket.setSoTimeout(previousTimeout);
                     }
                 
                     byte[] completeAudioPayload = audioStreamBuffer.toByteArray();

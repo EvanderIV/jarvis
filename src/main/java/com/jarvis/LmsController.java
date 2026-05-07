@@ -169,7 +169,7 @@ public class LmsController {
 
     /**
      * Gets the current playback status of a player.
-     * Returns a map containing playback info: "isPlaying", "currentFile", "duration", "time", "level", etc.
+     * Returns a map containing playback info: "isPlaying", "currentFile", "duration", "time", etc.
      */
     public Map<String, Object> getPlaybackStatus(String playerId) {
         Map<String, Object> status = new HashMap<>();
@@ -177,11 +177,6 @@ public class LmsController {
         
         if (response != null && response.has("result")) {
             JsonObject result = response.getAsJsonObject("result");
-            
-            if (App.DEBUG_MODE) {
-                System.out.println("[DEBUG] LMS Status response keys: " + result.keySet());
-            }
-            
             status.put("isPlaying", result.has("can_seek") && !result.get("mode").getAsString().equals("stop"));
             status.put("currentFile", result.has("current_title") ? result.get("current_title").getAsString() : null);
             status.put("mode", result.has("mode") ? result.get("mode").getAsString() : "stop");
@@ -190,55 +185,6 @@ public class LmsController {
             }
             if (result.has("time")) {
                 status.put("time", result.get("time").getAsDouble());
-            }
-            
-            // Try to extract audio level data if available
-            // LMS may provide this in various forms - check multiple possible field names
-            double audioLevel = 0.0;
-            boolean foundLevel = false;
-            
-            if (result.has("mixer")) {
-                try {
-                    JsonObject mixer = result.getAsJsonObject("mixer");
-                    if (App.DEBUG_MODE) {
-                        System.out.println("[DEBUG] Mixer object found: " + mixer.keySet());
-                    }
-                    if (mixer.has("level")) {
-                        audioLevel = mixer.get("level").getAsDouble();
-                        foundLevel = true;
-                        if (App.DEBUG_MODE) {
-                            System.out.println("[DEBUG] Found level in mixer: " + audioLevel);
-                        }
-                    }
-                } catch (Exception e) {
-                    if (App.DEBUG_MODE) {
-                        System.out.println("[DEBUG] Error reading mixer: " + e.getMessage());
-                    }
-                }
-            }
-            
-            if (!foundLevel && result.has("level")) {
-                audioLevel = result.get("level").getAsDouble();
-                foundLevel = true;
-                if (App.DEBUG_MODE) {
-                    System.out.println("[DEBUG] Found level in result: " + audioLevel);
-                }
-            }
-            
-            if (!foundLevel && result.has("power")) {
-                audioLevel = result.get("power").getAsDouble();
-                foundLevel = true;
-                if (App.DEBUG_MODE) {
-                    System.out.println("[DEBUG] Found power in result: " + audioLevel);
-                }
-            }
-            
-            if (!foundLevel && App.DEBUG_MODE) {
-                System.out.println("[DEBUG] No level data found in LMS response");
-            }
-            
-            if (audioLevel >= 0) {
-                status.put("level", audioLevel);
             }
         }
         

@@ -35,15 +35,7 @@ public class MusicManager {
     private List<String> targetMacs = new ArrayList<>();
     private String currentlyPlayingFile = null;
     private long lastTrackStartTime = 0;
-    
-    // Fadeout detection via rolling average audio level tracking
-    private double volumeSum = 0;
-    private int volumeSampleCount = 0;
-    private double rollingAverageVolume = 0;
-    private int lowVolumeCheckCount = 0;
-    private static final int LOW_VOLUME_CHECK_THRESHOLD = 3; // Require consistent low volume over multiple checks
-    private static final double LOW_VOLUME_RATIO = 0.5; // Detect as fadeout if level is below 50% of rolling average
-    private static final double FADEOUT_REMAINING_SECONDS = 8.0; // Only check fadeout in final 8 seconds
+    private float currentTrackFadeoutTimestamp = -1; // Fadeout point for current track, or -1 if none detected
     
     private Thread playbackMonitorThread = null;
     private volatile boolean isContinuousPlayEnabled = false;
@@ -225,13 +217,19 @@ public class MusicManager {
         // 5. Add to history
         addToHistory(selectedTrack.file);
 
-        // 6. Command LMS to play the file
+        // 6. Analyze audio for fadeout detection
+        AudioAnalyzer.FadeoutInfo fadeoutInfo = AudioAnalyzer.analyzeFadeout(fullPath);
+        currentTrackFadeoutTimestamp = (fadeoutInfo != null) ? fadeoutInfo.fadeoutTimestamp : -1;
+        
+        if (App.DEBUG_MODE && fadeoutInfo != null) {
+            System.out.println("[DEBUG] MusicManager: Pre-analyzed fadeout at " + 
+                             String.format("%.1f", fadeoutInfo.fadeoutTimestamp) + "s " +
+                             "(" + String.format("%.1f", fadeoutInfo.getSecondsUntilEnd()) + "s until end)");
+        }
+        
+        // 7. Command LMS to play the file
         currentlyPlayingFile = fullPath;
         lastTrackStartTime = System.currentTimeMillis();
-        volumeSum = 0;
-        volumeSampleCount = 0;
-        rollingAverageVolume = 0;
-        lowVolumeCheckCount = 0;
         
         lmsController.unmute(targetMacs);
         lmsController.playFile(targetMacs, fullPath);
@@ -280,23 +278,13 @@ public class MusicManager {
                         speakersToCheck = lmsController.getAllRegisteredSpeakers();
                     }
                     
-                    // If we have speakers, check remaining time to adjust sleep duration
+                    // If we have speakers, check status
                     if (!speakersToCheck.isEmpty() && currentlyPlayingFile != null) {
                         String firstSpeaker = speakersToCheck.get(0);
                         Map<String, Object> status = lmsController.getPlaybackStatus(firstSpeaker);
                         
                         if (!status.isEmpty()) {
-                            Double duration = (Double) status.get("duration");
-                            Double currentTime = (Double) status.get("time");
-                            
-                            if (duration != null && duration > 0 && currentTime != null) {
-                                double remainingTime = duration - currentTime;
-                                
-                                // Use 0.5 second checks in the fadeout detection window
-                                if (remainingTime <= FADEOUT_REMAINING_SECONDS && remainingTime > 0) {
-                                    sleepDuration = 500;
-                                }
-                            }
+                            // Could add custom sleep logic here for audio analysis in the future
                         }
                     }
                     
@@ -319,9 +307,8 @@ public class MusicManager {
     }
 
     /**
-     * Detects if the currently playing track has finished or should be skipped due to fadeout.
+     * Detects if the currently playing track has finished.
      * Queries LMS status to check if playback has stopped or moved to a new file.
-     * Detects fadeout by tracking audio level against a rolling average of the song's volume.
      */
     private boolean hasTrackFinished() {
         if (currentlyPlayingFile == null) {
@@ -367,51 +354,19 @@ public class MusicManager {
         if (currentFile != null && !currentlyPlayingFile.contains(currentFile)) {
             return true;
         }
-
-        // Track rolling average volume throughout the song and check for fadeout
-        Double duration = (Double) status.get("duration");
-        Double currentTime = (Double) status.get("time");
-        Double audioLevel = (Double) status.get("level");
         
-        if (duration != null && duration > 0 && currentTime != null && audioLevel != null) {
-            double remainingTime = duration - currentTime;
+        // Check if we've reached the fadeout point (pre-analyzed silent section)
+        if (currentTrackFadeoutTimestamp > 0) {
+            Double currentTime = (Double) status.get("time");
             
-            // Update rolling average with each sample
-            volumeSum += audioLevel;
-            volumeSampleCount++;
-            rollingAverageVolume = volumeSum / volumeSampleCount;
-            
-            // Only check for fadeout in the final 8 seconds
-            if (remainingTime <= FADEOUT_REMAINING_SECONDS && remainingTime > 0) {
-                // Check if audio level is consistently below 50% of the rolling average
-                double volumeThreshold = rollingAverageVolume * LOW_VOLUME_RATIO;
-                
+            if (currentTime != null && currentTime >= currentTrackFadeoutTimestamp) {
                 if (App.DEBUG_MODE) {
-                    System.out.println("[DEBUG] Fadeout check: level=" + String.format("%.1f", audioLevel) +
-                                     ", avg=" + String.format("%.1f", rollingAverageVolume) +
-                                     ", threshold=" + String.format("%.1f", volumeThreshold) +
-                                     ", belowThreshold=" + (audioLevel < volumeThreshold) +
-                                     ", lowVolumeCount=" + lowVolumeCheckCount +
-                                     ", remaining=" + String.format("%.1f", remainingTime) + "s");
+                    System.out.println("[DEBUG] MusicManager: Reached fadeout point at " + 
+                                     String.format("%.1f", currentTime) + "s (threshold: " + 
+                                     String.format("%.1f", currentTrackFadeoutTimestamp) + "s)");
                 }
-                
-                if (audioLevel < volumeThreshold) {
-                    lowVolumeCheckCount++;
-                    
-                    if (lowVolumeCheckCount >= LOW_VOLUME_CHECK_THRESHOLD) {
-                        System.out.println("[*] MusicManager: Detected fadeout (" + 
-                                         String.format("%.1f", remainingTime) + 
-                                         "s remaining, level: " + String.format("%.1f", audioLevel) +
-                                         ", avg: " + String.format("%.1f", rollingAverageVolume) +
-                                         "). Skipping to next song.");
-                        lowVolumeCheckCount = 0;
-                        return true;
-                    }
-                } else {
-                    lowVolumeCheckCount = 0; // Reset if level is above threshold
-                }
-            } else {
-                lowVolumeCheckCount = 0; // Reset if not in final window
+                System.out.println("[*] MusicManager: Fadeout detected, skipping to next song.");
+                return true;
             }
         }
 
@@ -440,10 +395,7 @@ public class MusicManager {
         // Clear state
         currentTheme = null;
         currentlyPlayingFile = null;
-        volumeSum = 0;
-        volumeSampleCount = 0;
-        rollingAverageVolume = 0;
-        lowVolumeCheckCount = 0;
+        currentTrackFadeoutTimestamp = -1;
         playHistory.clear();
         
         // An empty list tells the LmsController to stop playback on ALL registered speakers

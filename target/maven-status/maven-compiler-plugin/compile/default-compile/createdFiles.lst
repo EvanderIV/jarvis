@@ -10,8 +10,10 @@ com\jarvis\CommandUnfulfillableException.class
 com\jarvis\IntentParser.class
 com\jarvis\MusicManager$ThemeDefinition.class
 com\jarvis\CommandFulfiller$CommandResult.class
+com\jarvis\AudioAnalyzer.class
 com\jarvis\LmsController$1.class
 com\jarvis\ParsedCommand.class
+com\jarvis\AudioAnalyzer$FadeoutInfo.class
 com\jarvis\CommandFulfiller$1.class
 com\jarvis\MissingContextualTargetException.class
 com\jarvis\App.class

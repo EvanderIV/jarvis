@@ -269,6 +269,7 @@ public class IntentParser {
         // say.
         parameterMap.put("jazz", Arrays.asList("jazz", "jazzy", "smooth jazz"));
         parameterMap.put("active", Arrays.asList("active", "energetic", "upbeat", "workout", "pump up"));
+        parameterMap.put("epic", Arrays.asList("epic", "awesome", "power", "powerful", "heroic"));
         parameterMap.put("funk", Arrays.asList("funk", "funky", "groove"));
         parameterMap.put("lofi", Arrays.asList("lofi", "chill", "study"));
         parameterMap.put("relaxing", Arrays.asList("relaxing", "peaceful", "soothing", "calm"));
@@ -319,7 +320,9 @@ public class IntentParser {
                 .replaceAll("question music", "they active music")
                 .replaceAll("kill music", "kill the music")
                 .replaceAll("still the music", "kill the music")
-                .replaceAll("killed the music", "kill the music");
+                .replaceAll("killed the music", "kill the music")
+                .replaceAll("killer music", "kill the music")
+                .replaceAll("feel the music", "kill the music");
 
         Action foundAction = Action.UNKNOWN;
         Target foundTarget = Target.UNKNOWN;

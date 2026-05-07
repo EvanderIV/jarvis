@@ -104,7 +104,10 @@ public class MusicManager {
 
         // "active": Energetic, workout, pump up (Must avoid chill vibes, High Speed)
         themeMap.put("active",
-                new ThemeDefinition(new String[] { "Upbeat", "Driven", "Epic", "-Somber", "-Relaxing" }, 3, 4));
+                new ThemeDefinition(new String[] { "Upbeat", "Driven", "-Epic", "-Somber", "-Relaxing" }, 3, 4));
+
+        themeMap.put("epic",
+                new ThemeDefinition(new String[] { "+Epic", "Upbeat", "Driven", "-Relaxing" }, 2, 4));
 
         // "lofi": Chill, study, peaceful (Must be background friendly, Low Speed)
         themeMap.put("lofi", new ThemeDefinition(

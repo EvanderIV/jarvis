@@ -217,22 +217,16 @@ public class MusicManager {
         // 5. Add to history
         addToHistory(selectedTrack.file);
 
-        // 6. Analyze audio for fadeout detection
-        AudioAnalyzer.FadeoutInfo fadeoutInfo = AudioAnalyzer.analyzeFadeout(fullPath);
-        currentTrackFadeoutTimestamp = (fadeoutInfo != null) ? fadeoutInfo.fadeoutTimestamp : -1;
-        
-        if (App.DEBUG_MODE && fadeoutInfo != null) {
-            System.out.println("[DEBUG] MusicManager: Pre-analyzed fadeout at " + 
-                             String.format("%.1f", fadeoutInfo.fadeoutTimestamp) + "s " +
-                             "(" + String.format("%.1f", fadeoutInfo.getSecondsUntilEnd()) + "s until end)");
-        }
-        
-        // 7. Command LMS to play the file
+        // 6. Play the file IMMEDIATELY (don't wait for analysis)
         currentlyPlayingFile = fullPath;
         lastTrackStartTime = System.currentTimeMillis();
+        currentTrackFadeoutTimestamp = -1; // Mark as "not yet analyzed"
         
         lmsController.unmute(targetMacs);
         lmsController.playFile(targetMacs, fullPath);
+        
+        // 7. Analyze audio for fadeout detection IN BACKGROUND (with automatic MP3 conversion if needed)
+        spawnAnalysisThread(fullPath);
     }
 
     /**
@@ -246,6 +240,34 @@ public class MusicManager {
             // LinkedHashSet maintains insertion order, so remove the first (oldest) element
             playHistory.remove(playHistory.iterator().next());
         }
+    }
+    
+    /**
+     * Spawns a background thread to analyze an audio file for fadeout detection.
+     * Uses automatic MP3-to-WAV conversion if needed.
+     * Updates currentTrackFadeoutTimestamp when analysis completes.
+     */
+    private void spawnAnalysisThread(String filePath) {
+        Thread analysisThread = new Thread(() -> {
+            if (App.DEBUG_MODE) {
+                System.out.println("[DEBUG] MusicManager: Analysis thread started for " + filePath);
+            }
+            
+            AudioAnalyzer.FadeoutInfo fadeoutInfo = AudioAnalyzer.analyzeAudioWithConversion(filePath);
+            
+            // Update the fadeout timestamp if still playing the same file
+            if (currentlyPlayingFile != null && currentlyPlayingFile.equals(filePath)) {
+                currentTrackFadeoutTimestamp = (fadeoutInfo != null) ? fadeoutInfo.fadeoutTimestamp : -1;
+                
+                if (fadeoutInfo != null) {
+                    System.out.println("[*] MusicManager: Fadeout analysis complete at " + 
+                                     String.format("%.1f", fadeoutInfo.fadeoutTimestamp) + "s");
+                }
+            }
+        }, "AudioAnalysisThread");
+        
+        analysisThread.setDaemon(true);
+        analysisThread.start();
     }
 
     /**

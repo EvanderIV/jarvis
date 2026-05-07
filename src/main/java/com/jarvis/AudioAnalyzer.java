@@ -27,6 +27,10 @@ public class AudioAnalyzer {
      * Analyzes an audio file and returns the timestamp where fadeout is detected.
      * Results are cached to avoid re-analyzing the same file.
      * 
+     * Note: Java's AudioSystem only natively supports WAV, AIFF, and AU formats.
+     * MP3 and other compressed formats are not supported. Files in unsupported
+     * formats will be skipped from analysis, but playback will continue normally.
+     * 
      * @param filePath Absolute path to the audio file
      * @return FadeoutInfo containing the fadeout timestamp, or null if no fadeout detected or file is unreadable
      */
@@ -44,10 +48,169 @@ public class AudioAnalyzer {
             FadeoutInfo result = performAnalysis(filePath);
             fadeoutCache.put(filePath, result);
             return result;
+        } catch (javax.sound.sampled.UnsupportedAudioFileException e) {
+            String fileExt = getFileExtension(filePath);
+            System.out.println("[!] AudioAnalyzer: Skipping analysis - unsupported format '." + fileExt + "'");
+            System.out.println("    Supported formats: WAV, AIFF, AU");
+            System.out.println("    File will play normally without fadeout detection: " + filePath);
+            // Cache the null result to avoid repeated analysis failures
+            fadeoutCache.put(filePath, null);
+            return null;
         } catch (Exception e) {
             System.err.println("[-] AudioAnalyzer: Error analyzing '" + filePath + "': " + e.getMessage());
             // Cache the null result to avoid repeated analysis failures
             fadeoutCache.put(filePath, null);
+            return null;
+        }
+    }
+    
+    /**
+     * Extracts file extension from path.
+     */
+    private static String getFileExtension(String filePath) {
+        int lastDot = filePath.lastIndexOf('.');
+        if (lastDot > 0 && lastDot < filePath.length() - 1) {
+            return filePath.substring(lastDot + 1).toLowerCase();
+        }
+        return "unknown";
+    }
+    
+    /**
+     * Analyzes audio with automatic conversion for unsupported formats.
+     * If the file is in an unsupported format (e.g., MP3), it will:
+     * 1. Convert to temporary WAV file
+     * 2. Analyze the WAV
+     * 3. Cache the result under the original file path
+     * 4. Delete the temporary WAV
+     * 
+     * This is meant to be called asynchronously (in a background thread)
+     * after playback has already started.
+     * 
+     * @param filePath Absolute path to the audio file
+     * @return FadeoutInfo containing the fadeout timestamp, or null if analysis fails
+     */
+    public static FadeoutInfo analyzeAudioWithConversion(String filePath) {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            return null;
+        }
+        
+        // Check cache first
+        if (fadeoutCache.containsKey(filePath)) {
+            FadeoutInfo cached = fadeoutCache.get(filePath);
+            if (cached != null && App.DEBUG_MODE) {
+                System.out.println("[DEBUG] AudioAnalyzer: Using cached fadeout info for " + filePath);
+            }
+            return cached;
+        }
+        
+        try {
+            // Try direct analysis first (for WAV, AIFF, AU files)
+            FadeoutInfo result = performAnalysis(filePath);
+            fadeoutCache.put(filePath, result);
+            
+            if (result != null && App.DEBUG_MODE) {
+                System.out.println("[DEBUG] AudioAnalyzer: Analysis complete (direct) - " + result);
+            }
+            return result;
+        } catch (javax.sound.sampled.UnsupportedAudioFileException e) {
+            // File is in an unsupported format - try converting to WAV
+            String fileExt = getFileExtension(filePath);
+            System.out.println("[*] AudioAnalyzer: Converting ." + fileExt + " to WAV for analysis...");
+            
+            String tempWavPath = convertToWav(filePath);
+            if (tempWavPath == null) {
+                // Conversion failed
+                fadeoutCache.put(filePath, null);
+                return null;
+            }
+            
+            try {
+                // Analyze the temporary WAV file
+                FadeoutInfo result = performAnalysis(tempWavPath);
+                
+                // Cache using the original file path so the result is reusable
+                fadeoutCache.put(filePath, result);
+                
+                if (result != null && App.DEBUG_MODE) {
+                    System.out.println("[DEBUG] AudioAnalyzer: Analysis complete (converted) - " + result);
+                }
+                
+                return result;
+            } catch (Exception analysisError) {
+                System.err.println("[-] AudioAnalyzer: Error analyzing converted file: " + analysisError.getMessage());
+                fadeoutCache.put(filePath, null);
+                return null;
+            } finally {
+                // Always clean up the temporary WAV file
+                File tempFile = new File(tempWavPath);
+                if (tempFile.exists()) {
+                    if (tempFile.delete()) {
+                        if (App.DEBUG_MODE) {
+                            System.out.println("[DEBUG] AudioAnalyzer: Deleted temporary WAV file");
+                        }
+                    } else {
+                        System.err.println("[-] AudioAnalyzer: Could not delete temporary WAV file: " + tempWavPath);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[-] AudioAnalyzer: Error analyzing '" + filePath + "': " + e.getMessage());
+            fadeoutCache.put(filePath, null);
+            return null;
+        }
+    }
+    
+    /**
+     * Converts an audio file to WAV format.
+     * Returns the path to the temporary WAV file, or null if conversion fails.
+     */
+    private static String convertToWav(String sourcePath) {
+        try {
+            File sourceFile = new File(sourcePath);
+            if (!sourceFile.exists()) {
+                System.err.println("[-] AudioAnalyzer: Source file not found: " + sourcePath);
+                return null;
+            }
+            
+            // Create temp WAV file in the same directory
+            String tempPath = sourcePath + ".analysis.wav";
+            File tempWavFile = new File(tempPath);
+            
+            // Read the source audio
+            try (AudioInputStream sourceStream = AudioSystem.getAudioInputStream(sourceFile)) {
+                AudioFormat sourceFormat = sourceStream.getFormat();
+                
+                // Convert to standard WAV format (PCM, 44.1kHz, 16-bit, mono/stereo)
+                AudioFormat wavFormat = new AudioFormat(
+                    AudioFormat.Encoding.PCM_SIGNED,
+                    44100,                           // Sample rate
+                    16,                              // Sample size in bits
+                    sourceFormat.getChannels(),      // Keep original channel count
+                    sourceFormat.getChannels() * 2,  // Frame size
+                    44100,                           // Frame rate
+                    false                            // Little endian
+                );
+                
+                // Convert and write to temporary WAV
+                try (AudioInputStream convertedStream = AudioSystem.getAudioInputStream(wavFormat, sourceStream)) {
+                    int bytesWritten = AudioSystem.write(convertedStream, javax.sound.sampled.AudioFileFormat.Type.WAVE, tempWavFile);
+                    
+                    if (bytesWritten > 0) {
+                        if (App.DEBUG_MODE) {
+                            System.out.println("[DEBUG] AudioAnalyzer: Converted to WAV (" + bytesWritten + " bytes)");
+                        }
+                        return tempPath;
+                    } else {
+                        System.err.println("[-] AudioAnalyzer: No bytes written during conversion");
+                        if (tempWavFile.exists()) {
+                            tempWavFile.delete();
+                        }
+                        return null;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[-] AudioAnalyzer: Conversion to WAV failed: " + e.getMessage());
             return null;
         }
     }

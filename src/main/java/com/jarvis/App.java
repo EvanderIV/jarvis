@@ -5,11 +5,14 @@ import java.net.SocketException;
 import java.util.Scanner;
 
 public class App {
+
+    public static boolean DEBUG_MODE = false;
     
     // The port your ESP32s/Python spoofers will target
     private static final int WAKE_WORD_PORT = 3900;
 
     public static void main(String[] args) {
+        DEBUG_MODE = args.length > 0 && args[0].equalsIgnoreCase("--debug");
         System.out.println("Initializing Arbitration Server...");
 
         try {

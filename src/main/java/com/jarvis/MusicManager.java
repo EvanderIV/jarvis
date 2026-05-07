@@ -386,6 +386,15 @@ public class MusicManager {
                 // Check if audio level is consistently below 50% of the rolling average
                 double volumeThreshold = rollingAverageVolume * LOW_VOLUME_RATIO;
                 
+                if (App.DEBUG_MODE) {
+                    System.out.println("[DEBUG] Fadeout check: level=" + String.format("%.1f", audioLevel) +
+                                     ", avg=" + String.format("%.1f", rollingAverageVolume) +
+                                     ", threshold=" + String.format("%.1f", volumeThreshold) +
+                                     ", belowThreshold=" + (audioLevel < volumeThreshold) +
+                                     ", lowVolumeCount=" + lowVolumeCheckCount +
+                                     ", remaining=" + String.format("%.1f", remainingTime) + "s");
+                }
+                
                 if (audioLevel < volumeThreshold) {
                     lowVolumeCheckCount++;
                     

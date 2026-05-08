@@ -124,6 +124,9 @@ public class MusicManager {
         // "fancy_restaurant": Dinner/elegant music (Smooth, unobtrusive, Low Speed)
         themeMap.put("fancy_restaurant", new ThemeDefinition(new String[] { "+Jazz", "Piano", "Relaxing", "Relaxed",
                 "-Epic", "-Tense", "-Driven", "-Wakeup", "-Upbeat", "-Somber" }, 0, 2));
+
+        themeMap.put("meme",
+                new ThemeDefinition(new String[] { "+Meme" }, 0, 4));
     }
 
     /**

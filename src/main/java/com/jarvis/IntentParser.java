@@ -282,6 +282,7 @@ public class IntentParser {
         parameterMap.put("wakeup", Arrays.asList("wake up", "morning music", "sunrise music"));
         parameterMap.put("fancy_restaurant",
                 Arrays.asList("fancy restaurant", "dinner music", "classy music", "elegant music"));
+        parameterMap.put("meme", Arrays.asList("meme music"));
         parameterMap.put("time", getTime);
         parameterMap.put("weather", getWeather);
         parameterMap.put("jorkening", jorkening);

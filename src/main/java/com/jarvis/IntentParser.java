@@ -310,6 +310,7 @@ public class IntentParser {
 
         String normalizedText = " " + rawText.toLowerCase() + " "; // Pad for easier word boundary matching
         normalizedText = normalizedText.replaceAll("turned", "turn").replaceAll("played", "play")
+                .replaceAll("plane", "play")
                 .replaceAll("playful music", "play some music").replaceAll("place music", "play some music")
                 .replaceAll("place and music", "play some music").replaceAll("place the music", "play some music")
                 .replaceAll("pleasure music", "play some music")

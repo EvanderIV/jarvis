@@ -282,7 +282,7 @@ public class IntentParser {
         parameterMap.put("wakeup", Arrays.asList("wake up", "morning music", "sunrise music"));
         parameterMap.put("fancy_restaurant",
                 Arrays.asList("fancy restaurant", "dinner music", "classy music", "elegant music"));
-        parameterMap.put("meme", Arrays.asList("meme music"));
+        parameterMap.put("meme", Arrays.asList("meme music", "funny music", "funny songs", "meme songs"));
         parameterMap.put("time", getTime);
         parameterMap.put("weather", getWeather);
         parameterMap.put("jorkening", jorkening);
@@ -310,12 +310,14 @@ public class IntentParser {
 
         String normalizedText = " " + rawText.toLowerCase() + " "; // Pad for easier word boundary matching
         normalizedText = normalizedText.replaceAll("turned", "turn").replaceAll("played", "play")
+                .replaceAll("killed", "kill").replaceAll("killer", "kill")
                 .replaceAll("plane", "play")
                 .replaceAll("playful music", "play some music").replaceAll("place music", "play some music")
                 .replaceAll("place and music", "play some music").replaceAll("place the music", "play some music")
                 .replaceAll("pleasure music", "play some music")
                 .replaceAll("place the music", "play some music").replaceAll("please music", "play some music")
                 .replaceAll("pleasant music", "play some music")
+                .replaceAll("pushing music", "play some music")
                 .replaceAll("please show music", "play some music")
                 .replaceAll("play acted music", "play active music")
                 .replaceAll("play acted music", "they active music")
@@ -323,13 +325,12 @@ public class IntentParser {
                 .replaceAll("a big music", "epic music")
                 .replaceAll("kill music", "kill the music")
                 .replaceAll("still the music", "kill the music")
-                .replaceAll("killed the music", "kill the music")
-                .replaceAll("killer music", "kill the music")
+                .replaceAll("still a music", "kill the music")
                 .replaceAll("feel the music", "kill the music")
                 .replaceAll("play mean music", "play meme music")
                 .replaceAll("play me music", "play meme music")
-                .replaceAll("play mean songs", "play meme music")
-                .replaceAll("play me songs", "play meme music");
+                .replaceAll("play mean songs", "play meme songs")
+                .replaceAll("play me songs", "play meme songs");
 
         Action foundAction = Action.UNKNOWN;
         Target foundTarget = Target.UNKNOWN;

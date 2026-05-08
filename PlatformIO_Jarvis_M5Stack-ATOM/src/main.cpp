@@ -45,7 +45,7 @@ CRGB leds[NUM_LEDS];
 
 // --- VAD (Voice Activity) CONFIG ---
 // Adjust these if the mic triggers too easily or not easily enough!
-const double TRIGGER_THRESHOLD = 300.0; 
+const double TRIGGER_THRESHOLD = 310.0;
 const double SILENCE_THRESHOLD = 250.0;
 const int MAX_SILENCE_CHUNKS = 30; // Stop streaming after ~1.5 seconds of silence
 
@@ -96,11 +96,32 @@ void flash_eof_led() {
     Serial.println("[*] Flashing EOF Visual Feedback...");
     
     // Quick double flash of bright orange
+    for (int i = 0; i < 3; i++) {
+        leds[0] = CRGB::Green;
+        FastLED.setBrightness(255);
+        FastLED.show();
+        delay(50);
+        
+        FastLED.setBrightness(0);
+        FastLED.show();
+        delay(100);
+    }
+    
+    // Restore default dim blue glow
+    leds[0] = CRGB(0, 150, 255);
+    FastLED.setBrightness(5);
+    FastLED.show();
+}
+
+void flash_arbfail_led() {
+    Serial.println("[*] Flashing EOF Visual Feedback...");
+    
+    // Quick double flash of bright orange
     for (int i = 0; i < 2; i++) {
         leds[0] = CRGB::Orange;
         FastLED.setBrightness(255);
         FastLED.show();
-        delay(150);
+        delay(100);
         
         FastLED.setBrightness(0);
         FastLED.show();
@@ -252,8 +273,8 @@ void loop() {
 
     // --- LED VOLUME FEEDBACK ---
     // Map the volume (RMS) to LED brightness (10 to 255)
-    // Assume silence is around SILENCE_THRESHOLD and loud talking hits ~600
-    int brightness = map((long)rms, (long)SILENCE_THRESHOLD, 600, 5, 255);
+    // Assume silence is around TRIGGER_THRESHOLD and loud talking hits ~600
+    int brightness = map((long)rms, (long)TRIGGER_THRESHOLD, 600, 5, 255);
     brightness = constrain(brightness, 5, 255);
     FastLED.setBrightness(brightness);
     FastLED.show();
@@ -321,6 +342,7 @@ void loop() {
             silence_counter++;
             if (silence_counter > 20) {
                 Serial.println("[-] Arbitration lost/timeout. Back to listening.");
+                flash_arbfail_led();
                 currentState = LISTENING;
             }
         }

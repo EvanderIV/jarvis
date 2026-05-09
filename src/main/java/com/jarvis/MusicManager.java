@@ -130,6 +130,9 @@ public class MusicManager {
 
         themeMap.put("meme",
                 new ThemeDefinition(new String[] { "+Meme" }, 0, 4));
+
+        themeMap.put("cooking curry",
+                new ThemeDefinition(new String[] { "+Cooking Curry" }, 1, 4));
     }
 
     /**

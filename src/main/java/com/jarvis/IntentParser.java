@@ -286,6 +286,10 @@ public class IntentParser {
         parameterMap.put("time", getTime);
         parameterMap.put("weather", getWeather);
         parameterMap.put("jorkening", jorkening);
+
+        // Other less-important parameters:
+        parameterMap.put("cooking curry", Arrays.asList("curry cooking music"));
+
         // Set param to the number of minutes for timers if they say "set a timer for 5
         // minutes" or "remind me in 10 minutes"
         for (int i = 1; i <= 60; i++) {
@@ -310,7 +314,7 @@ public class IntentParser {
 
         String normalizedText = " " + rawText.toLowerCase() + " "; // Pad for easier word boundary matching
         normalizedText = normalizedText.replaceAll("turned", "turn").replaceAll("played", "play")
-                .replaceAll("killed", "kill").replaceAll("killer", "kill")
+                .replaceAll("killed", "kill").replaceAll("killer", "kill").replaceAll("killing", "kill")
                 .replaceAll("plane", "play")
                 .replaceAll("playful music", "play some music").replaceAll("place music", "play some music")
                 .replaceAll("place and music", "play some music").replaceAll("place the music", "play some music")

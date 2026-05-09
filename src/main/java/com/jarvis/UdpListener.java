@@ -23,6 +23,10 @@ public class UdpListener implements Runnable {
     // every command
     private final CommandFulfiller fulfiller;
 
+    private static String[] wakeTriggers = { "jarvis", "jervis", "darvish", "dervish", "dervis", "garbage",
+            "jurgen", "drivers", "travis", "harvest", "journalist", "german", "germans",
+            "georgia", "jarred", "target", "judge", "your this", "this", "jerks", "service" };
+
     // UPDATED CONSTRUCTOR: Now accepts the CommandFulfiller from App.java
     public UdpListener(DatagramSocket socket, CommandFulfiller fulfiller) {
         this.socket = socket;
@@ -38,6 +42,22 @@ public class UdpListener implements Runnable {
             System.err.println(
                     "[-] Failed to load Vosk model. Did you extract it to the 'model' directory in the project root?");
             e.printStackTrace();
+        }
+
+        switch (App.WAKE_WORD) {
+            case "echo":
+                wakeTriggers = new String[] { "echo", "ago", "go", "i go" };
+                break;
+            case "alexa":
+                wakeTriggers = new String[] { "echo", "ago", "go", "i go" };
+                break;
+            default: // "jarvis"
+                // wakeTriggers = new String[] { "jarvis", "jervis", "darvish", "dervish",
+                // "dervis", "garbage",
+                // "jurgen", "drivers", "travis", "harvest", "journalist", "german", "germans",
+                // "georgia", "jarred", "target", "judge", "your this", "this", "jerks",
+                // "service" };
+                break;
         }
     }
 
@@ -131,25 +151,18 @@ public class UdpListener implements Runnable {
                             JsonObject jsonObject = gson.fromJson(resultJson, JsonObject.class);
                             String transcribedText = jsonObject.has("text") ? jsonObject.get("text").getAsString() : "";
 
-                            String[] jarvisPhonetics = { "jarvis", "jervis", "darvish", "dervish", "dervis", "garbage",
-                                    "jurgen",
-                                    "drivers", "travis", "harvest", "journalist", "german", "germans", "georgia",
-                                    "jarred",
-                                    "target",
-                                    "judge", "your this", "this", "jerks", "service" };
-
                             String jarvisRegex = "(?i)\\b(";
-                            for (int i = 0; i < jarvisPhonetics.length - 1; i++) {
-                                jarvisRegex += jarvisPhonetics[i] + " |";
+                            for (int i = 0; i < wakeTriggers.length - 1; i++) {
+                                jarvisRegex += wakeTriggers[i] + " |";
                             }
-                            jarvisRegex += jarvisPhonetics[jarvisPhonetics.length - 1] + " )\\b";
+                            jarvisRegex += wakeTriggers[wakeTriggers.length - 1] + " )\\b";
 
                             String[] prefixCommands = { "good morning", "good night", "goodnight" };
 
                             String overrideEndCasesForCommands = "";
-                            for (int i = 0; i < jarvisPhonetics.length; i++) {
+                            for (int i = 0; i < wakeTriggers.length; i++) {
                                 for (String prefCmd : prefixCommands) {
-                                    overrideEndCasesForCommands += prefCmd + " " + jarvisPhonetics[i] + "|";
+                                    overrideEndCasesForCommands += prefCmd + " " + wakeTriggers[i] + "|";
                                 }
                             }
                             overrideEndCasesForCommands = overrideEndCasesForCommands.substring(0,

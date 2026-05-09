@@ -133,6 +133,8 @@ public class MusicManager {
 
         themeMap.put("cooking curry",
                 new ThemeDefinition(new String[] { "+Cooking Curry" }, 1, 4));
+        themeMap.put("jorkening",
+                new ThemeDefinition(new String[] { "+Jorkening" }, 0, 4));
     }
 
     /**

@@ -239,7 +239,6 @@ public class IntentParser {
                 "initiate ", "the in the ", "the and the ");
         List<String> theGame = Arrays.asList("lost the game");
         List<String> banter = new LinkedList<>();
-        banter.addAll(jorkening);
         banter.addAll(theGame);
         actionSynonyms.put(Action.BANTER, banter);
 
@@ -253,6 +252,7 @@ public class IntentParser {
         speakerSynonyms.addAll(banter);
         speakerSynonyms.addAll(setTimer);
         speakerSynonyms.addAll(utilities);
+        speakerSynonyms.addAll(jorkening);
         targetSynonyms.put(Target.SPEAKER_ARRAY, speakerSynonyms);
 
         // Map target capabilities to validate context
@@ -328,6 +328,7 @@ public class IntentParser {
                 .replaceAll("question music", "they active music")
                 .replaceAll("a big music", "epic music")
                 .replaceAll("kill music", "kill the music")
+                .replaceAll("kill them is it", "kill the music")
                 .replaceAll("still the music", "kill the music")
                 .replaceAll("still a music", "kill the music")
                 .replaceAll("feel the music", "kill the music")

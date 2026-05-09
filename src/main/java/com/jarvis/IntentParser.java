@@ -327,6 +327,8 @@ public class IntentParser {
                 .replaceAll("play acted music", "they active music")
                 .replaceAll("question music", "they active music")
                 .replaceAll("a big music", "epic music")
+                .replaceAll("gilder music", "kill the music")
+                .replaceAll("till the music", "kill the music")
                 .replaceAll("kill music", "kill the music")
                 .replaceAll("kill them is it", "kill the music")
                 .replaceAll("still the music", "kill the music")

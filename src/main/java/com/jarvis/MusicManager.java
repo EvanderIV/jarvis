@@ -89,33 +89,36 @@ public class MusicManager {
      */
     private void initializeThemes() {
         // --- Exact Genre Translations ---
-        themeMap.put("jazz", new ThemeDefinition(new String[] { "Jazz" }, 0, 4));
-        themeMap.put("classical", new ThemeDefinition(new String[] { "Orchestral", "Piano" }, 0, 3));
-        themeMap.put("electronic", new ThemeDefinition(new String[] { "Electronic" }, 1, 4));
-        themeMap.put("rock", new ThemeDefinition(new String[] { "Rock" }, 2, 4));
-        themeMap.put("ambient", new ThemeDefinition(new String[] { "Ambient" }, 0, 2));
-        themeMap.put("country", new ThemeDefinition(new String[] { "Folk", "Country" }, 1, 4));
+        themeMap.put("jazz", new ThemeDefinition(new String[] { "Jazz", "-Meme" }, 0, 4));
+        themeMap.put("classical", new ThemeDefinition(new String[] { "Orchestral", "Piano", "-Meme" }, 0, 3));
+        themeMap.put("electronic", new ThemeDefinition(new String[] { "Electronic", "-Meme" }, 1, 4));
+        themeMap.put("rock", new ThemeDefinition(new String[] { "Rock", "-Meme" }, 2, 4));
+        themeMap.put("ambient", new ThemeDefinition(new String[] { "Ambient", "-Meme" }, 0, 2));
+        themeMap.put("country", new ThemeDefinition(new String[] { "Folk", "Country", "-Meme" }, 1, 4));
 
         // Funk/Hip Hop
-        themeMap.put("funk", new ThemeDefinition(new String[] { "+Upbeat", "Funk", "Groove", "Jazz" }, 2, 4));
-        themeMap.put("hip hop", new ThemeDefinition(new String[] { "Hip Hop", "Rap", "Beat" }, 2, 4));
+        themeMap.put("funk", new ThemeDefinition(new String[] { "+Upbeat", "Funk", "Groove", "Jazz", "-Meme" }, 2, 4));
+        themeMap.put("hip hop", new ThemeDefinition(new String[] { "Hip Hop", "Rap", "Beat", "-Meme" }, 2, 4));
 
         // --- Vibe / Mood Translations (Using Logic & Speed) ---
 
         // "active": Energetic, workout, pump up (Must avoid chill vibes, High Speed)
         themeMap.put("active",
-                new ThemeDefinition(new String[] { "Upbeat", "Driven", "-Epic", "-Somber", "-Relaxing" }, 3, 4));
+                new ThemeDefinition(
+                        new String[] { "Upbeat", "Driven", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity" },
+                        3, 4));
 
         themeMap.put("epic",
-                new ThemeDefinition(new String[] { "+Epic", "Upbeat", "Driven", "-Relaxing" }, 2, 4));
+                new ThemeDefinition(new String[] { "+Epic", "Upbeat", "Driven", "-Meme", "-Relaxing" }, 2, 4));
 
         // "lofi": Chill, study, peaceful (Must be background friendly, Low Speed)
         themeMap.put("lofi", new ThemeDefinition(
-                new String[] { "+Focused", "Relaxing", "Ambient", "-Tense", "-Epic", "-Driven", "-Lyrics" }, 1, 2));
+                new String[] { "+Focused", "Relaxing", "Ambient", "-Tense", "-Epic", "-Driven", "-Meme", "-Lyrics" }, 1,
+                2));
 
         themeMap.put("relaxing", new ThemeDefinition(
                 new String[] { "+Relaxing", "Ambient", "Focused", "-Tense", "-Epic", "-Driven", "-Repetitive",
-                        "-Mystical" },
+                        "-Mystical", "-Meme", "-Lyrics" },
                 0, 1));
 
         // "wakeup": Morning music (Use the explicit Wakeup tag or generally happy
@@ -125,8 +128,9 @@ public class MusicManager {
                         3));
 
         // "fancy_restaurant": Dinner/elegant music (Smooth, unobtrusive, Low Speed)
-        themeMap.put("fancy_restaurant", new ThemeDefinition(new String[] { "+Jazz", "Piano", "Relaxing", "Relaxed",
-                "-Epic", "-Tense", "-Driven", "-Wakeup", "-Somber", "-Mystical", "-Meme", "-Lyrics" }, 0, 2));
+        themeMap.put("fancy_restaurant", new ThemeDefinition(new String[] { "+Jazz", "Piano", "Relaxing",
+                "-Epic", "-Tense", "-Driven", "-Wakeup", "-Somber", "-Mystical", "-Meme", "-Lyrics", "-Repetitive" }, 0,
+                2));
 
         themeMap.put("meme",
                 new ThemeDefinition(new String[] { "+Meme" }, 0, 4));

@@ -25,7 +25,7 @@ public class UdpListener implements Runnable {
 
     private static String[] wakeTriggers = { "jarvis", "jervis", "darvish", "dervish", "dervis", "garbage",
             "jurgen", "drivers", "travis", "harvest", "journalist", "german", "germans",
-            "georgia", "jarred", "target", "judge", "your this", "this", "jerks", "service" };
+            "georgia", "jarred", "target", "judge", "your this", "this", "jerks", "service", "dravid" };
 
     // UPDATED CONSTRUCTOR: Now accepts the CommandFulfiller from App.java
     public UdpListener(DatagramSocket socket, CommandFulfiller fulfiller) {

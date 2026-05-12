@@ -234,7 +234,7 @@ public class IntentParser {
                 "drug getting", "door getting", "door cunning",
                 "door to me", "door opening", "jorc opening", "jork opening",
                 "joking", "majorcan getting", "dorgan it", "jerk", "jerk opening", "jerk getting",
-                "chortling", "door kidding");
+                "chortling", "door kidding", "drawer gettings");
         List<String> jorkening = generatePhrasePrefixes(jorkeningBase, "begin the ", "initiate the ", "begin ",
                 "initiate ", "the in the ", "the and the ");
         List<String> theGame = Arrays.asList("lost the game");
@@ -330,6 +330,8 @@ public class IntentParser {
                 .replaceAll("gilder music", "kill the music")
                 .replaceAll("till the music", "kill the music")
                 .replaceAll("kill music", "kill the music")
+                .replaceAll("kill them move it", "kill the music")
+                .replaceAll("kill them it", "kill the music")
                 .replaceAll("kill them is it", "kill the music")
                 .replaceAll("still the music", "kill the music")
                 .replaceAll("still a music", "kill the music")

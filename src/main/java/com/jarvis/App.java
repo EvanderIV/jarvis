@@ -28,7 +28,7 @@ public class App {
             RoutineEngine routineEngine = new RoutineEngine(lmsController, musicManager);
             
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
-                .triggerAtTime(13, 54)
+                .triggerAtTime(13, 55)
                 .setVolumeRatio(0.0)
                 .playTheme("+Wakeup Happy Upbeat -Somber -Lyrics")
                 .fadeVolumeRatio(0.0, 0.5, 60)

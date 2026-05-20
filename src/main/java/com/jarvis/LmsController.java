@@ -35,6 +35,10 @@ public class LmsController {
     private final Map<String, String> registeredSpeakers = new ConcurrentHashMap<>();
     private static final String CONFIG_FILE = "lms_speakers_config.json";
 
+    // --- Volume Config ---
+    private final Map<String, Integer> defaultVolumes = new ConcurrentHashMap<>();
+    private static final String VOLUMES_FILE = "lms_volumes_config.json";
+
     /**
      * Initializes the controller for Logitech Media Server.
      * Pulls authentication securely from the LMS_AUTH environment variable.
@@ -59,6 +63,7 @@ public class LmsController {
         }
 
         loadConfig();
+        loadVolumes();
     }
 
     // --- Core Action Methods ---
@@ -168,7 +173,11 @@ public class LmsController {
         if (registeredSpeakers.isEmpty()) {
             System.out.println("  (None)");
         } else {
-            registeredSpeakers.forEach((mac, name) -> System.out.println("  - " + name + " [" + mac + "]"));
+            registeredSpeakers.forEach((mac, name) -> {
+                int vol = getDefaultVolume(mac, -1);
+                String volStr = vol >= 0 ? " (Default Vol: " + vol + "%)" : "";
+                System.out.println("  - " + name + " [" + mac + "]" + volStr);
+            });
         }
         System.out.println("---------------------------\n");
     }
@@ -187,6 +196,67 @@ public class LmsController {
             System.out.println("  (All connected speakers are registered)");
         }
         System.out.println("---------------------------\n");
+    }
+    
+    // --- Volume Config Management ---
+
+    private void loadVolumes() {
+        try {
+            Path path = Paths.get(VOLUMES_FILE);
+            if (Files.exists(path)) {
+                String json = Files.readString(path);
+                java.lang.reflect.Type type = new TypeToken<Map<String, Integer>>() {
+                }.getType();
+                Map<String, Integer> loaded = gson.fromJson(json, type);
+                if (loaded != null) {
+                    defaultVolumes.putAll(loaded);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("[-] Failed to load volumes config: " + e.getMessage());
+        }
+    }
+
+    private void saveVolumes() {
+        try {
+            String json = gson.toJson(defaultVolumes);
+            Files.writeString(Paths.get(VOLUMES_FILE), json);
+        } catch (Exception e) {
+            System.err.println("[-] Failed to save volumes config: " + e.getMessage());
+        }
+    }
+
+    public String resolveAliasToMac(String aliasOrMac) {
+        // Check if it's already a registered MAC
+        if (registeredSpeakers.containsKey(aliasOrMac)) {
+            return aliasOrMac;
+        }
+        // Search by alias (case-insensitive)
+        for (Map.Entry<String, String> entry : registeredSpeakers.entrySet()) {
+            if (entry.getValue().equalsIgnoreCase(aliasOrMac)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    public void setDefaultVolume(String aliasOrMac, int volumePercent) {
+        String mac = resolveAliasToMac(aliasOrMac);
+        if (mac == null) {
+            System.out.println("[-] Target not found. Ensure the speaker is registered first.");
+            return;
+        }
+        int clamped = Math.max(0, Math.min(100, volumePercent));
+        defaultVolumes.put(mac, clamped);
+        saveVolumes();
+
+        // Immediately apply the new volume to the speaker
+        setVolume(Arrays.asList(mac), clamped);
+        System.out.println("[+] Saved and applied default volume " + clamped + "% for '" + registeredSpeakers.get(mac) + "'");
+    }
+
+    public int getDefaultVolume(String macAddress, int fallback) {
+        return defaultVolumes.getOrDefault(macAddress, fallback);
     }
 
     /**

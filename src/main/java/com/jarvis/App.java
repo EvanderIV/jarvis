@@ -3,6 +3,7 @@ package com.jarvis;
 import java.net.DatagramSocket;
 import java.net.SocketException;
 import java.util.Scanner;
+import java.util.Arrays;
 
 public class App {
 
@@ -22,6 +23,19 @@ public class App {
             LmsController lmsController = new LmsController("127.0.0.1");
             MusicManager musicManager = new MusicManager(lmsController);
             CommandFulfiller fulfiller = new CommandFulfiller(musicManager, lmsController);
+
+            // 1.5. Initialize the Routine Engine and Schedule the Wake-Up Routine!
+            RoutineEngine routineEngine = new RoutineEngine(lmsController, musicManager);
+            
+            routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
+                .triggerAtTime(13, 45)
+                .setVolumeRatio(0.0)
+                .playTheme("+Wakeup Happy Upbeat -Somber -Lyrics")
+                .fadeVolumeRatio(0.0, 0.5, 60)
+                .waitMinutes(0.5)
+                .playTheme("Upbeat Driven -Epic -Somber -Relaxing -Meme -Profanity")
+                .fadeVolumeRatio(0.5, 0.8, 30)
+                .build();
 
             // 2. Open the central UDP socket
             DatagramSocket udpSocket = new DatagramSocket(WAKE_WORD_PORT);
@@ -64,12 +78,22 @@ public class App {
                     lmsController.registerSpeaker(mac, name);
                 } else if (parts[0].equals("remove") && parts.length == 2) {
                     lmsController.removeSpeaker(parts[1]);
+                } else if (parts[0].equals("volume") && parts.length >= 3) {
+                    try {
+                        int vol = Integer.parseInt(parts[parts.length - 1]);
+                        // Safely extract the alias (even if it has spaces) by joining everything in the middle
+                        String target = String.join(" ", Arrays.copyOfRange(parts, 1, parts.length - 1));
+                        lmsController.setDefaultVolume(target, vol);
+                    } catch (NumberFormatException e) {
+                        System.out.println("[-] Invalid volume. Usage: volume <mac or alias> <level>");
+                    }
                 } else if (parts[0].equals("help")) {
                     System.out.println("Commands:");
                     System.out.println("  scan                      - Find new unregistered speakers on the network");
                     System.out.println("  list                      - Show all registered trusted speakers");
                     System.out.println("  register <mac> <alias>    - Add a speaker to the trusted list");
                     System.out.println("  remove <mac>              - Remove a speaker from the trusted list");
+                    System.out.println("  volume <target> <level>   - Set and save default volume for an alias or MAC (e.g., volume Bedroom 60)");
                     System.out.println("  exit                      - Shut down the server");
                 } else if (parts[0].equals("exit")) {
                     System.out.println("[*] Stopping UDP Listener...");

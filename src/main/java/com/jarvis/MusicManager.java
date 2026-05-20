@@ -442,6 +442,21 @@ public class MusicManager {
     }
 
     /**
+     * Switches to a new theme without interrupting the currently playing track.
+     * If music is already running, the new theme takes effect on the next track.
+     * If nothing is playing, starts playback immediately.
+     */
+    public void switchTheme(String newTheme, List<String> targetMacs) {
+        if (isContinuousPlayEnabled && currentlyPlayingFile != null) {
+            System.out.println("[*] MusicManager: Queuing theme switch to '" + newTheme + "' after current track.");
+            this.currentTheme = newTheme;
+            this.playHistory.clear();
+        } else {
+            playMusic(newTheme, targetMacs);
+        }
+    }
+
+    /**
      * Stops currently playing music and disables continuous playback.
      */
     public void stopMusic() {
@@ -504,7 +519,15 @@ public class MusicManager {
                     .collect(Collectors.toList());
         }
 
-        // 2. Otherwise, do a direct search (e.g. if the user explicitly asked for
+        // 2. Inline tag expression (e.g. "+Relaxing active -Somber") — split and evaluate directly
+        if (lowerQuery.contains("+") || lowerQuery.contains("-") || lowerQuery.contains(" ")) {
+            String[] tags = lowerQuery.trim().split("\\s+");
+            return library.stream()
+                    .filter(track -> evaluateLogicTags(track, tags))
+                    .collect(Collectors.toList());
+        }
+
+        // 3. Otherwise, do a direct search (e.g. if the user explicitly asked for
         // "Jazz" or a specific title)
         return library.stream()
                 .filter(track -> matchesSingleKeyword(track, lowerQuery))

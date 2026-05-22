@@ -30,9 +30,9 @@ public class App {
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
                 .triggerAtTime(9, 0)
                 .setVolumeRatio(0.0)
-                .playTheme("+Wakeup -Somber")
+                .playTheme("+Wakeup -Somber", 0, 3)
                 .fadeVolumeRatio(0.0, 0.33, 30)
-                .playTheme("+Relaxing Upbeat Happy -Epic -Somber -Relaxing -Meme -Profanity")
+                .playTheme("+Relaxing Upbeat Happy -Epic -Somber -Relaxing -Meme -Profanity", 2, 2)
                 .fadeVolumeRatio(0.33, 1.0, 90)
                 .build();
 

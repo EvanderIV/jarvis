@@ -58,6 +58,11 @@ public class App {
             System.out.println("\n[+] Type 'help' for commands.");
 
             while (true) {
+                if (!scanner.hasNextLine()) {
+                    // stdin is closed (running as a service with no terminal) — idle quietly
+                    try { Thread.sleep(60000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                    continue;
+                }
                 System.out.print("Jarvis-Admin> ");
                 String input = scanner.nextLine().trim();
 

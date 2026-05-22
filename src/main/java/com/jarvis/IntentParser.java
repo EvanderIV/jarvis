@@ -199,6 +199,65 @@ public class IntentParser {
         return false;
     }
 
+    // Compiled once at class load — applied in order on every parse() call.
+    // Each entry is { regex, replacement }. Order matters: verb normalization
+    // fires first so later phrase rules see the base form (e.g. "kill", not "killed").
+    private static final Pattern[] CORRECTION_PATTERNS;
+    private static final String[]  CORRECTION_REPLACEMENTS;
+    static {
+        String[][] rules = {
+            // --- Verb normalization ---
+            { "\\b(turn|play)ed\\b",                        "$1"               },
+            { "\\bkill(?:ed|ing|er)\\b",                    "kill"             },
+
+            // --- "play" phonetic corrections (Vosk mishearings) ---
+            { "\\b(?:plane|display|way|why)\\b",            "play"             },
+
+            // --- "play some music" mishearings ---
+            { "\\b(?:playful music"
+            + "|place(?:(?: and)| the)? music"
+            + "|pleasure music"
+            + "|please(?:(?: show))? music"
+            + "|pleasant music"
+            + "|pushing music"
+            + "|poking music"
+            + "|paid for music)\\b",                        "play some music"  },
+
+            // --- "play active music" mishearings ---
+            { "\\b(?:play acted music|question music)\\b",  "play active music"},
+
+            // --- genre corrections ---
+            { "\\ba big music\\b",                          "epic music"       },
+            { "\\b(?:lacking|rock) music\\b",               "relaxing music"   },
+
+            // --- "kill the music" mishearings ---
+            { "\\b(?:gilder music"
+            + "|tiller? music"
+            + "|(?:still|skill) (?:the|a) music"
+            + "|feel the music"
+            + "|kill(?: a| the)? music"
+            + "|kill them (?:move it|is it|it)"
+            + "|kill (?:him|kilometers) (?:his iq|is it|is a)"
+            + "|kill amelia"
+            + "|kill a kill music"
+            + "|kill in iraq"
+            + "|telling good luck)\\b",                     "kill the music"   },
+
+            // --- "play meme music" mishearings ---
+            { "\\bplay me(?:an)? (?:music|songs)\\b",       "play meme music"  },
+
+            // --- popcorn mishearings ---
+            { "\\bmake(?: me)?(?: some)? popcorn\\b",       "play popcorn music"},
+        };
+
+        CORRECTION_PATTERNS    = new Pattern[rules.length];
+        CORRECTION_REPLACEMENTS = new String[rules.length];
+        for (int i = 0; i < rules.length; i++) {
+            CORRECTION_PATTERNS[i]    = Pattern.compile(rules[i][0]);
+            CORRECTION_REPLACEMENTS[i] = rules[i][1];
+        }
+    }
+
     public IntentParser() {
         // Map all the ways a user might phrase an action
         actionSynonyms.put(Action.TURN_ON, Arrays.asList("turn on", "enable", "start", "lights on", "activate",
@@ -314,50 +373,9 @@ public class IntentParser {
         }
 
         String normalizedText = " " + rawText.toLowerCase() + " "; // Pad for easier word boundary matching
-        normalizedText = normalizedText.replaceAll("turned", "turn").replaceAll("played", "play")
-                .replaceAll("killed", "kill").replaceAll("killer", "kill").replaceAll("killing", "kill")
-                .replaceAll("plane", "play").replaceAll("display", "play").replaceAll("way", "play").replaceAll("why", "play")
-                .replaceAll("playful music", "play some music")
-                .replaceAll("place music", "play some music")
-                .replaceAll("place and music", "play some music")
-                .replaceAll("place the music", "play some music")
-                .replaceAll("pleasure music", "play some music")
-                .replaceAll("place the music", "play some music")
-                .replaceAll("please music", "play some music")
-                .replaceAll("pleasant music", "play some music")
-                .replaceAll("pushing music", "play some music")
-                .replaceAll("poking music", "play some music")
-                .replaceAll("paid for music", "play some music")
-                .replaceAll("please show music", "play some music")
-                .replaceAll("play acted music", "play active music")
-                .replaceAll("play acted music", "they active music")
-                .replaceAll("question music", "they active music")
-                .replaceAll("a big music", "epic music")
-                .replaceAll("lacking music", "relaxing music")
-                .replaceAll("rock music", "relaxing music")
-                .replaceAll("gilder music", "kill the music")
-                .replaceAll("till the music", "kill the music")
-                .replaceAll("kill music", "kill the music")
-                .replaceAll("kill them move it", "kill the music")
-                .replaceAll("kill him his iq", "kill the music")
-                .replaceAll("kill them it", "kill the music")
-                .replaceAll("killed in iraq", "kill the music")
-                .replaceAll("kill them is it", "kill the music")
-                .replaceAll("still the music", "kill the music")
-                .replaceAll("still a music", "kill the music")
-                .replaceAll("still the music", "kill the music")
-                .replaceAll("skill a music", "kill the music")
-                .replaceAll("skill the music", "kill the music")
-                .replaceAll("telling good luck", "kill the music")
-                .replaceAll("feel the music", "kill the music")
-                .replaceAll("play mean music", "play meme music")
-                .replaceAll("play me music", "play meme music")
-                .replaceAll("play mean songs", "play meme songs")
-                .replaceAll("play me songs", "play meme songs")
-                .replaceAll("make popcorn", "play popcorn music")
-                .replaceAll("make some popcorn", "play popcorn music")
-                .replaceAll("make me popcorn", "play popcorn music")
-                .replaceAll("make me some popcorn", "play popcorn music");
+        for (int i = 0; i < CORRECTION_PATTERNS.length; i++) {
+            normalizedText = CORRECTION_PATTERNS[i].matcher(normalizedText).replaceAll(CORRECTION_REPLACEMENTS[i]);
+        }
 
         Action foundAction = Action.UNKNOWN;
         Target foundTarget = Target.UNKNOWN;

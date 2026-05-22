@@ -25,7 +25,7 @@ public class UdpListener implements Runnable {
 
     private static String[] wakeTriggers = { "jarvis", "jervis", "darvish", "dervish", "dervis", "garbage",
             "jurgen", "drivers", "travis", "harvest", "journalist", "german", "germans",
-            "georgia", "jarred", "target", "judge", "your", "your this", "this", "jerk", "jerks", "service", "dravid", "just" };
+            "georgia", "george", "jarred", "target", "judge", "your", "your this", "this", "jerk", "jerks", "service", "dravid", "just" };
 
     // UPDATED CONSTRUCTOR: Now accepts the CommandFulfiller from App.java
     public UdpListener(DatagramSocket socket, CommandFulfiller fulfiller) {
@@ -49,7 +49,13 @@ public class UdpListener implements Runnable {
                 wakeTriggers = new String[] { "echo", "ago", "go", "i go" };
                 break;
             case "alexa":
-                wakeTriggers = new String[] { "echo", "ago", "go", "i go" };
+                wakeTriggers = new String[] { "alexa", "lecture", "a lecture", "lecturn", "a lecturn", "elixir" };
+                break;
+            case "mycroft":
+                wakeTriggers = new String[] { "mycroft", "microsoft", "my craft", "my draft", "my grabbed", "my dropped", "my shrugged", "my grab", "mike robbed" };
+                break;
+            case "cortana":
+                wakeTriggers = new String[] { "cortana", "cortona", "core kana", "court on a", "court on", "quarter" };
                 break;
             default: // "jarvis"
                 // wakeTriggers = new String[] { "jarvis", "jervis", "darvish", "dervish",

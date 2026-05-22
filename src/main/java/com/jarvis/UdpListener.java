@@ -4,6 +4,8 @@ import java.io.ByteArrayOutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.SocketTimeoutException;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
 import org.vosk.Model;
@@ -34,9 +36,9 @@ public class UdpListener implements Runnable {
 
         // Initialize the Vosk Model here so it only loads into memory once.
         try {
-            System.out.println("[*] Loading Vosk Model...");
-            // Ensure you have a folder named "model" in your project root
-            this.voskModel = new Model("model");
+            String modelPath = "model";
+            System.out.println("[*] Loading Vosk Model from '" + new java.io.File(modelPath).getAbsolutePath() + "'...");
+            this.voskModel = new Model(modelPath);
             System.out.println("[+] Vosk Model loaded successfully.");
         } catch (Exception e) {
             System.err.println(
@@ -155,12 +157,10 @@ public class UdpListener implements Runnable {
 
                     // Pass the captured audio to Vosk
                     if (voskModel != null && completeAudioPayload.length > 0) {
-                        System.out.println("[*] Transcribing audio...");
-                        // Create a recognizer for this specific audio stream (16000 Hz is standard for
-                        // ESP32/Emulators)
+                        System.out.println("[*] Normalizing and transcribing audio...");
+                        byte[] audioToTranscribe = normalize(completeAudioPayload, 3000.0f);
                         try (Recognizer recognizer = new Recognizer(voskModel, 16000)) {
-                            // Feed the entire byte array to the recognizer
-                            recognizer.acceptWaveForm(completeAudioPayload, completeAudioPayload.length);
+                            recognizer.acceptWaveForm(audioToTranscribe, audioToTranscribe.length);
 
                             // Extract the final JSON result
                             String resultJson = recognizer.getFinalResult();
@@ -218,6 +218,35 @@ public class UdpListener implements Runnable {
                 }
             }
         }
+    }
+
+    // Scales 16-bit little-endian PCM to a target RMS level, capped at 4x gain.
+    // Matches the AGC target on the ESP32 so both sides agree on a nominal level.
+    private static byte[] normalize(byte[] pcm, float targetRms) {
+        int numSamples = pcm.length / 2;
+        if (numSamples == 0) return pcm;
+
+        ByteBuffer readBuf = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN);
+        double sum = 0;
+        for (int i = 0; i < numSamples; i++) {
+            short s = readBuf.getShort(i * 2);
+            sum += (double) s * s;
+        }
+        float rms = (float) Math.sqrt(sum / numSamples);
+        if (rms < 10f) return pcm; // silence — skip
+
+        float gain = Math.min(targetRms / rms, 4.0f);
+        System.out.printf("[*] Audio normalization: RMS=%.1f, gain=%.2fx%n", rms, gain);
+
+        byte[] out = new byte[pcm.length];
+        ByteBuffer writeBuf = ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN);
+        readBuf.rewind();
+        for (int i = 0; i < numSamples; i++) {
+            short s = readBuf.getShort();
+            int amplified = Math.max(-32768, Math.min(32767, (int) (s * gain)));
+            writeBuf.putShort((short) amplified);
+        }
+        return out;
     }
 
     public void stop() {

@@ -28,7 +28,6 @@ WiFiUDP udp;
 #define SAMPLE_RATE 16000
 #define BUFFER_SIZE 1024
 uint8_t audio_buffer[BUFFER_SIZE];
-const float MIC_GAIN = 1.5;
 
 // --- PRE-ROLL BUFFER CONFIG ---
 // 16000Hz * 16-bit Mono = 32,000 bytes per second.
@@ -57,6 +56,22 @@ const int MAX_SILENCE_CHUNKS = 30; // Stop streaming after ~1.5 seconds of silen
 const float HP_ALPHA = 0.9444f;
 static float hp_prev_input  = 0.0f;
 static float hp_prev_output = 0.0f;
+
+// --- AGC CONFIG ---
+// Dynamically adjusts gain each chunk to hit a target RMS, keeping speech loud
+// regardless of mic distance. Alpha controls adaptation speed: higher = slower,
+// smoother (less pumping). Initial gain of 3.0 avoids a silent first chunk.
+const float AGC_TARGET_RMS = 3000.0f;
+const float AGC_MAX_GAIN   = 10.0f;
+const float AGC_MIN_GAIN   = 1.0f;
+const float AGC_ALPHA      = 0.95f;
+static float agc_gain      = 3.0f;
+
+// --- PRE-EMPHASIS CONFIG ---
+// y[n] = x[n] - 0.97 * x[n-1]. Boosts high-frequency consonants (s, t, k, sh)
+// that ASR models rely on. Standard in speech recognition preprocessing.
+const float PE_COEFF        = 0.97f;
+static float pe_prev_sample = 0.0f;
 
 enum State { LISTENING, WAITING_ACK, STREAMING };
 State currentState = LISTENING;
@@ -106,18 +121,18 @@ void flash_init_led() {
     
     // Quick flash of bright purple
     leds[0] = CRGB::Purple;
-    FastLED.setBrightness(255);
+    FastLED.setBrightness(63);
     FastLED.show();
     delay(500);
     
-    FastLED.setBrightness(0);
-    FastLED.show();
-    delay(100);
+    // FastLED.setBrightness(0);
+    // FastLED.show();
+    // delay(100);
     
     // Restore default dim blue glow
-    leds[0] = CRGB(0, 150, 255);
-    FastLED.setBrightness(5);
-    FastLED.show();
+    // leds[0] = CRGB(0, 150, 255);
+    // FastLED.setBrightness(5);
+    // FastLED.show();
 }
 
 void flash_ready_led() {
@@ -299,18 +314,35 @@ void setup() {
     Serial.println("[+] Satellite is LIVE. Listening for noise...");
 }
 
-void apply_gain(uint8_t* buffer, size_t bytes_read) {
-  int16_t* samples = (int16_t*)buffer;
-  int num_samples = bytes_read / 2;
+void apply_agc(uint8_t* buffer, size_t bytes_read, double chunk_rms) {
+    int16_t* samples = (int16_t*)buffer;
+    int num_samples = bytes_read / 2;
 
-  for (int i = 0; i < num_samples; i++) {
-    int32_t amplified = (int32_t)(samples[i] * MIC_GAIN);
+    if (chunk_rms > 10.0) {
+        float desired = AGC_TARGET_RMS / (float)chunk_rms;
+        desired = constrain(desired, AGC_MIN_GAIN, AGC_MAX_GAIN);
+        agc_gain = AGC_ALPHA * agc_gain + (1.0f - AGC_ALPHA) * desired;
+    }
 
-    if (amplified > 32767) amplified = 32767;
-    if (amplified < -32768) amplified = -32768;
+    for (int i = 0; i < num_samples; i++) {
+        int32_t amplified = (int32_t)(samples[i] * agc_gain);
+        if (amplified >  32767) amplified =  32767;
+        if (amplified < -32768) amplified = -32768;
+        samples[i] = (int16_t)amplified;
+    }
+}
 
-    samples[i] = (int16_t)amplified;
-  }
+void apply_preemphasis(uint8_t* buffer, size_t bytes_read) {
+    int16_t* samples = (int16_t*)buffer;
+    int num_samples = bytes_read / 2;
+    for (int i = 0; i < num_samples; i++) {
+        float x = (float)samples[i];
+        float y = x - PE_COEFF * pe_prev_sample;
+        pe_prev_sample = x;
+        if (y >  32767.0f) y =  32767.0f;
+        if (y < -32768.0f) y = -32768.0f;
+        samples[i] = (int16_t)y;
+    }
 }
 
 void apply_highpass_filter(uint8_t* buffer, size_t bytes_read) {
@@ -333,10 +365,10 @@ void loop() {
 
     if (bytes_read == 0) return;
 
-    apply_gain(audio_buffer, bytes_read);
     apply_highpass_filter(audio_buffer, bytes_read);
-
-    double rms = get_rms(audio_buffer, bytes_read) / MIC_GAIN;
+    double rms = get_rms(audio_buffer, bytes_read);  // before AGC so VAD thresholds remain calibrated
+    apply_agc(audio_buffer, bytes_read, rms);
+    apply_preemphasis(audio_buffer, bytes_read);
 
     // --- PRE-ROLL MEMORY ---
     // Constantly record the last ~1 second of audio so the start of the wake word isn't clipped
@@ -464,9 +496,10 @@ void loop() {
             silence_counter = 0;
             chunks_in_buffer = 0; // Clear memory so we don't resend old EOF silence next time!
 
-            // Reset high-pass filter state so residual streaming audio doesn't bleed into the next trigger
+            // Reset filter states so residual streaming audio doesn't bleed into the next trigger
             hp_prev_input  = 0.0f;
             hp_prev_output = 0.0f;
+            pe_prev_sample = 0.0f;
 
             // Briefly clear the I2S DMA buffer to avoid processing any hardware noise generated during the flash
             i2s_zero_dma_buffer(I2S_NUM_0);

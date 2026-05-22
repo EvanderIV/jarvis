@@ -45,8 +45,8 @@ CRGB leds[NUM_LEDS];
 
 // --- VAD (Voice Activity) CONFIG ---
 // Adjust these if the mic triggers too easily or not easily enough!
-const double TRIGGER_THRESHOLD = 310.0;
-const double SILENCE_THRESHOLD = 250.0;
+const double TRIGGER_THRESHOLD = 370.0;
+const double SILENCE_THRESHOLD = 280.0;
 const int MAX_SILENCE_CHUNKS = 30; // Stop streaming after ~1.5 seconds of silence
 
 enum State { LISTENING, WAITING_ACK, STREAMING };
@@ -92,10 +92,48 @@ double get_rms(uint8_t* buffer, size_t bytes_read) {
     return sqrt(sum / num_samples);
 }
 
+void flash_init_led() {
+    Serial.println("[*] Flashing INIT Visual Feedback...");
+    
+    // Quick flash of bright purple
+    leds[0] = CRGB::Purple;
+    FastLED.setBrightness(255);
+    FastLED.show();
+    delay(500);
+    
+    FastLED.setBrightness(0);
+    FastLED.show();
+    delay(100);
+    
+    // Restore default dim blue glow
+    leds[0] = CRGB(0, 150, 255);
+    FastLED.setBrightness(5);
+    FastLED.show();
+}
+
+void flash_ready_led() {
+    Serial.println("[*] Flashing INIT Visual Feedback...");
+    
+    // Quick flash of bright white
+    leds[0] = CRGB::White;
+    FastLED.setBrightness(255);
+    FastLED.show();
+    delay(500);
+    
+    FastLED.setBrightness(0);
+    FastLED.show();
+    delay(100);
+    
+    // Restore default dim blue glow
+    leds[0] = CRGB(0, 150, 255);
+    FastLED.setBrightness(5);
+    FastLED.show();
+}
+
 void flash_eof_led() {
     Serial.println("[*] Flashing EOF Visual Feedback...");
     
-    // Quick double flash of bright orange
+    // Quick triple flash of bright green
     for (int i = 0; i < 3; i++) {
         leds[0] = CRGB::Green;
         FastLED.setBrightness(255);
@@ -114,7 +152,7 @@ void flash_eof_led() {
 }
 
 void flash_arbfail_led() {
-    Serial.println("[*] Flashing EOF Visual Feedback...");
+    Serial.println("[*] Flashing ARBFAIL Visual Feedback...");
     
     // Quick double flash of bright orange
     for (int i = 0; i < 2; i++) {
@@ -136,7 +174,6 @@ void flash_arbfail_led() {
 
 void setup() {
     Serial.begin(115200);
-    delay(1000);
 
     // --- THERMAL MANAGEMENT ---
     // Downclock CPU from 240MHz to 80MHz to drastically reduce heat and power draw
@@ -145,10 +182,12 @@ void setup() {
 
     // 0. Init LED
     FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
-    leds[0] = CRGB(0, 150, 255); // Cool cyber blue
-    FastLED.setBrightness(5);   // Default dim glow
+    leds[0] = CRGB::Purple; // Power LED
+    FastLED.setBrightness(255);
     FastLED.show();
 
+    delay(1000);
+    
     if (!DEBUG_OFFLINE_MODE) {
         // 1. Connect to Wi-Fi
         Serial.printf("\n[*] Connecting to %s", ssid);
@@ -164,6 +203,8 @@ void setup() {
         // This is perfectly fine for indoor apartment range and drastically lowers LDO heat.
         WiFi.setTxPower(WIFI_POWER_8_5dBm);
         Serial.println("[*] Wi-Fi TX Power throttled to 8.5dBm to reduce heat.");
+
+        flash_init_led();
 
         delay(500);
 
@@ -233,7 +274,19 @@ void setup() {
 
     // 2. Init Microphone
     setup_i2s();
-    
+
+    // Drain the PDM mic's DMA buffers for 500ms — the first reads after i2s_driver_install
+    // contain hardware initialization noise that would otherwise immediately blast a false trigger.
+    Serial.println("[*] Draining I2S startup noise...");
+    size_t dummy_bytes;
+    unsigned long drain_start = millis();
+    while (millis() - drain_start < 500) {
+        i2s_read(I2S_NUM_0, &audio_buffer, BUFFER_SIZE, &dummy_bytes, portMAX_DELAY);
+    }
+    i2s_zero_dma_buffer(I2S_NUM_0);
+
+    flash_ready_led();
+
     Serial.println("[+] Satellite is LIVE. Listening for noise...");
 }
 

@@ -162,16 +162,22 @@ public class CommandFulfiller {
         return new CommandResult(true, message);
     }
 
+    private static final int DEFAULT_VOLUME_FALLBACK = 60;
+
     private CommandResult handlePlayMusic(ParsedCommand command) {
         String genre = command.parameter != null ? command.parameter : "default";
         String message = String.format("Playing %s music on %s", genre, formatTargetName(command.target));
         System.out.println("[+] " + message);
-        
-        // Pass an empty list to target ALL registered speakers.
-        // If you map specific Target enums to MACs later, you'd populate this list!
+
         List<String> targetMacs = new ArrayList<>();
         musicManager.playMusic(genre, targetMacs);
-        
+
+        double volumeRatio = "epic".equals(genre) ? 0.9 : 0.7;
+        for (String mac : lmsController.getAllRegisteredSpeakers()) {
+            int speakerMax = lmsController.getDefaultVolume(mac, DEFAULT_VOLUME_FALLBACK);
+            lmsController.setVolume(List.of(mac), (int) Math.round(volumeRatio * speakerMax));
+        }
+
         return new CommandResult(true, message);
     }
 

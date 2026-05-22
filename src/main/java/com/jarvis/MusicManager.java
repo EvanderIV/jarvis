@@ -32,6 +32,8 @@ public class MusicManager {
 
     // Continuous playback state
     private String currentTheme = null;
+    private int currentMinSpeed = 0;
+    private int currentMaxSpeed = 4;
     private final Set<String> playHistory = new LinkedHashSet<>();
     private List<String> targetMacs = new ArrayList<>();
     private String currentlyPlayingFile = null;
@@ -175,6 +177,10 @@ public class MusicManager {
      * Also enables continuous playback within the same theme.
      */
     public void playMusic(String parameter, List<String> targetMacs) {
+        playMusic(parameter, targetMacs, 0, 4);
+    }
+
+    public void playMusic(String parameter, List<String> targetMacs, int minSpeed, int maxSpeed) {
         if (library.isEmpty()) {
             System.out.println("[-] Cannot play music, library is empty.");
             return;
@@ -182,6 +188,8 @@ public class MusicManager {
 
         // Initialize continuous playback state
         this.currentTheme = parameter != null ? parameter : "default";
+        this.currentMinSpeed = minSpeed;
+        this.currentMaxSpeed = maxSpeed;
         this.targetMacs = new ArrayList<>(targetMacs);
         this.playHistory.clear();
         this.isContinuousPlayEnabled = true;
@@ -451,12 +459,18 @@ public class MusicManager {
      * If nothing is playing, starts playback immediately.
      */
     public void switchTheme(String newTheme, List<String> targetMacs) {
+        switchTheme(newTheme, targetMacs, 0, 4);
+    }
+
+    public void switchTheme(String newTheme, List<String> targetMacs, int minSpeed, int maxSpeed) {
         if (isContinuousPlayEnabled && currentlyPlayingFile != null) {
             System.out.println("[*] MusicManager: Queuing theme switch to '" + newTheme + "' after current track.");
             this.currentTheme = newTheme;
+            this.currentMinSpeed = minSpeed;
+            this.currentMaxSpeed = maxSpeed;
             this.playHistory.clear();
         } else {
-            playMusic(newTheme, targetMacs);
+            playMusic(newTheme, targetMacs, minSpeed, maxSpeed);
         }
     }
 
@@ -526,7 +540,10 @@ public class MusicManager {
         // 2. Inline tag expression (e.g. "+Relaxing active -Somber") — split and evaluate directly
         if (lowerQuery.contains("+") || lowerQuery.contains("-") || lowerQuery.contains(" ")) {
             String[] tags = lowerQuery.trim().split("\\s+");
+            final int minSpd = currentMinSpeed;
+            final int maxSpd = currentMaxSpeed;
             return library.stream()
+                    .filter(track -> track.speed >= minSpd && track.speed <= maxSpd)
                     .filter(track -> evaluateLogicTags(track, tags))
                     .collect(Collectors.toList());
         }

@@ -14,7 +14,7 @@ import com.google.gson.JsonObject;
 
 public class UdpListener implements Runnable {
 
-    private final static int TIMEOUT_SECONDS = 5000;
+    private final static int TIMEOUT_MS = 7000;
     private final DatagramSocket socket;
     private volatile boolean running = true;
     private Model voskModel;
@@ -25,7 +25,7 @@ public class UdpListener implements Runnable {
 
     private static String[] wakeTriggers = { "jarvis", "jervis", "darvish", "dervish", "dervis", "garbage",
             "jurgen", "drivers", "travis", "harvest", "journalist", "german", "germans",
-            "georgia", "jarred", "target", "judge", "your this", "this", "jerks", "service", "dravid" };
+            "georgia", "jarred", "target", "judge", "your", "your this", "this", "jerks", "service", "dravid" };
 
     // UPDATED CONSTRUCTOR: Now accepts the CommandFulfiller from App.java
     public UdpListener(DatagramSocket socket, CommandFulfiller fulfiller) {
@@ -97,7 +97,7 @@ public class UdpListener implements Runnable {
                     // Set a 7-second timeout for audio reception
                     // (commands are typically much shorter than this)
                     int previousTimeout = socket.getSoTimeout();
-                    socket.setSoTimeout(TIMEOUT_SECONDS * 1000);
+                    socket.setSoTimeout(TIMEOUT_MS);
 
                     try {
                         while (running) {
@@ -116,7 +116,7 @@ public class UdpListener implements Runnable {
                             audioStreamBuffer.write(audioPacket.getData(), 0, audioPacket.getLength());
                         }
                     } catch (SocketTimeoutException e) {
-                        System.out.println("[*] Audio stream timeout (" + TIMEOUT_SECONDS
+                        System.out.println("[*] Audio stream timeout (" + TIMEOUT_MS / 1000
                                 + " seconds elapsed). Stopping audio capture.");
                     } finally {
                         // Restore the original socket timeout

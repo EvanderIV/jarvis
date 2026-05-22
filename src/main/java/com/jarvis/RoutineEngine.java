@@ -139,13 +139,17 @@ public class RoutineEngine {
          * Hooks into the new MusicManager Theme system (e.g., "wakeup", "lofi", "active")
          */
         public RoutineBuilder playTheme(String themeName) {
+            return playTheme(themeName, 0, 4);
+        }
+
+        public RoutineBuilder playTheme(String themeName, int minSpeed, int maxSpeed) {
             final long executionTime = accumulatedDelaySeconds;
-            
+
             scheduler.schedule(() -> {
                 System.out.println("[*] Routine: Switching to theme '" + themeName + "'...");
-                musicManager.switchTheme(themeName, targetMacs);
+                musicManager.switchTheme(themeName, targetMacs, minSpeed, maxSpeed);
             }, executionTime, TimeUnit.SECONDS);
-            
+
             return this;
         }
 

@@ -441,6 +441,10 @@ public class MusicManager {
         return false;
     }
 
+    public boolean isPlaying() {
+        return isContinuousPlayEnabled;
+    }
+
     /**
      * Switches to a new theme without interrupting the currently playing track.
      * If music is already running, the new theme takes effect on the next track.

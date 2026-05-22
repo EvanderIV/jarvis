@@ -51,6 +51,7 @@ public class RoutineEngine {
             long executionDelayMs = i * delayBetweenStepsMs;
 
             scheduler.schedule(() -> {
+                if (!musicManager.isPlaying()) return;
                 double ratio = startRatio + (endRatio - startRatio) * ((double) step / steps);
                 for (String mac : targetMacs) {
                     int speakerMax = lmsController.getDefaultVolume(mac, DEFAULT_VOLUME_FALLBACK);
@@ -114,6 +115,7 @@ public class RoutineEngine {
 
         public RoutineBuilder fadeVolumeRatio(double startRatio, double endRatio, int durationSeconds) {
             final long executionTime = accumulatedDelaySeconds;
+            accumulatedDelaySeconds += durationSeconds;
 
             scheduler.schedule(() -> {
                 System.out.println("[*] Routine: Fading volume from ratio " + startRatio + " to " + endRatio);

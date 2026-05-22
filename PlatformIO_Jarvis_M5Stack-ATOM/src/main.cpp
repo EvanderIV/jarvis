@@ -49,6 +49,15 @@ const double TRIGGER_THRESHOLD = 370.0;
 const double SILENCE_THRESHOLD = 280.0;
 const int MAX_SILENCE_CHUNKS = 30; // Stop streaming after ~1.5 seconds of silence
 
+// --- HIGH-PASS FILTER CONFIG ---
+// Removes low-frequency rumble (footsteps, vibrations) before RMS is calculated.
+// Footstep energy is typically below 100 Hz; speech starts at ~85 Hz but its
+// phonemic content (what triggers wake-word detection) lives above 250 Hz.
+// α = fs / (fs + 2π·fc) — at fc=150 Hz, fs=16000 Hz → α ≈ 0.9444
+const float HP_ALPHA = 0.9444f;
+static float hp_prev_input  = 0.0f;
+static float hp_prev_output = 0.0f;
+
 enum State { LISTENING, WAITING_ACK, STREAMING };
 State currentState = LISTENING;
 int silence_counter = 0;
@@ -182,7 +191,7 @@ void setup() {
 
     // 0. Init LED
     FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
-    leds[0] = CRGB::Purple; // Power LED
+    leds[0] = CRGB::Red; // Power LED
     FastLED.setBrightness(255);
     FastLED.show();
 
@@ -304,13 +313,28 @@ void apply_gain(uint8_t* buffer, size_t bytes_read) {
   }
 }
 
+void apply_highpass_filter(uint8_t* buffer, size_t bytes_read) {
+    int16_t* samples = (int16_t*)buffer;
+    int num_samples = bytes_read / 2;
+    for (int i = 0; i < num_samples; i++) {
+        float x = (float)samples[i];
+        float y = HP_ALPHA * (hp_prev_output + x - hp_prev_input);
+        hp_prev_input  = x;
+        hp_prev_output = y;
+        if (y >  32767.0f) y =  32767.0f;
+        if (y < -32768.0f) y = -32768.0f;
+        samples[i] = (int16_t)y;
+    }
+}
+
 void loop() {
     size_t bytes_read;
     i2s_read(I2S_NUM_0, &audio_buffer, BUFFER_SIZE, &bytes_read, portMAX_DELAY);
-    
+
     if (bytes_read == 0) return;
 
     apply_gain(audio_buffer, bytes_read);
+    apply_highpass_filter(audio_buffer, bytes_read);
 
     double rms = get_rms(audio_buffer, bytes_read) / MIC_GAIN;
 
@@ -439,9 +463,13 @@ void loop() {
             currentState = LISTENING;
             silence_counter = 0;
             chunks_in_buffer = 0; // Clear memory so we don't resend old EOF silence next time!
-            
+
+            // Reset high-pass filter state so residual streaming audio doesn't bleed into the next trigger
+            hp_prev_input  = 0.0f;
+            hp_prev_output = 0.0f;
+
             // Briefly clear the I2S DMA buffer to avoid processing any hardware noise generated during the flash
-            i2s_zero_dma_buffer(I2S_NUM_0); 
+            i2s_zero_dma_buffer(I2S_NUM_0);
             delay(500); // Debounce to prevent immediate re-trigger
         }
     }

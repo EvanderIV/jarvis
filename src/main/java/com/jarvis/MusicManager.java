@@ -141,6 +141,8 @@ public class MusicManager {
                 new ThemeDefinition(new String[] { "+Cooking Curry" }, 1, 4));
         themeMap.put("jorkening",
                 new ThemeDefinition(new String[] { "+Jorkening" }, 0, 4));
+        themeMap.put("microwave popcorn",
+                new ThemeDefinition(new String[] { "+Microwave Popcorn" }, 0, 4));
     }
 
     /**

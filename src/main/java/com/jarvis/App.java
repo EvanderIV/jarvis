@@ -28,12 +28,17 @@ public class App {
             RoutineEngine routineEngine = new RoutineEngine(lmsController, musicManager);
             
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
-                .triggerAtTime(9, 0)
+                .triggerAtTime(8, 0)
                 .setVolumeRatio(0.0)
                 .playTheme("+Wakeup -Somber", 0, 3)
                 .fadeVolumeRatio(0.0, 0.33, 30)
-                .playTheme("+Relaxing Upbeat Happy -Epic -Somber -Relaxing -Meme -Profanity", 2, 2)
-                .fadeVolumeRatio(0.33, 1.0, 90)
+                .playTheme("+Relaxing Upbeat Happy -Epic -Somber -Relaxing -Meme -Profanity -Wakeup", 2, 2)
+                .fadeVolumeRatio(0.33, 1.0, 150)
+                .waitMinutes(2.5)
+                .playTheme("+Upbeat Relaxing Happy -Epic -Somber -Relaxing -Meme -Profanity -Wakeup", 2, 2)
+                .waitMinutes(6)
+                .fadeVolumeRatio(1.0, 0.7, 120)
+                .playTheme("+Upbeat Relaxing Happy -Epic -Somber -Relaxing -Meme -Profanity -Wakeup", 2, 2)
                 .build();
 
             // 2. Open the central UDP socket

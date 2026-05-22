@@ -288,7 +288,8 @@ public class IntentParser {
         parameterMap.put("jorkening", jorkening);
 
         // Other less-important parameters:
-        parameterMap.put("cooking curry", Arrays.asList("curry cooking music"));
+        parameterMap.put("cooking curry", Arrays.asList("curry cooking music", "curry the music", "curry cooking tunes", "liquor cooking music"));
+        parameterMap.put("microwave popcorn", Arrays.asList("popcorn", "popcorn music", "popcorn cooking music"));
 
         // Set param to the number of minutes for timers if they say "set a timer for 5
         // minutes" or "remind me in 10 minutes"
@@ -332,6 +333,8 @@ public class IntentParser {
                 .replaceAll("play acted music", "they active music")
                 .replaceAll("question music", "they active music")
                 .replaceAll("a big music", "epic music")
+                .replaceAll("lacking music", "relaxing music")
+                .replaceAll("rock music", "relaxing music")
                 .replaceAll("gilder music", "kill the music")
                 .replaceAll("till the music", "kill the music")
                 .replaceAll("kill music", "kill the music")
@@ -342,12 +345,19 @@ public class IntentParser {
                 .replaceAll("kill them is it", "kill the music")
                 .replaceAll("still the music", "kill the music")
                 .replaceAll("still a music", "kill the music")
+                .replaceAll("still the music", "kill the music")
+                .replaceAll("skill a music", "kill the music")
+                .replaceAll("skill the music", "kill the music")
                 .replaceAll("telling good luck", "kill the music")
                 .replaceAll("feel the music", "kill the music")
                 .replaceAll("play mean music", "play meme music")
                 .replaceAll("play me music", "play meme music")
                 .replaceAll("play mean songs", "play meme songs")
-                .replaceAll("play me songs", "play meme songs");
+                .replaceAll("play me songs", "play meme songs")
+                .replaceAll("make popcorn", "play popcorn music")
+                .replaceAll("make some popcorn", "play popcorn music")
+                .replaceAll("make me popcorn", "play popcorn music")
+                .replaceAll("make me some popcorn", "play popcorn music");
 
         Action foundAction = Action.UNKNOWN;
         Target foundTarget = Target.UNKNOWN;

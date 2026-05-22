@@ -55,7 +55,7 @@ public class UdpListener implements Runnable {
                 wakeTriggers = new String[] { "mycroft", "microsoft", "my craft", "my draft", "my grabbed", "my dropped", "my shrugged", "my grab", "mike robbed" };
                 break;
             case "cortana":
-                wakeTriggers = new String[] { "cortana", "cortona", "core kana", "court on a", "court on", "quarter" };
+                wakeTriggers = new String[] { "cortana", "cortona", "core kana", "court on a", "court on", "quarter", "we're gonna", "corker" };
                 break;
             default: // "jarvis"
                 // wakeTriggers = new String[] { "jarvis", "jervis", "darvish", "dervish",
@@ -132,6 +132,18 @@ public class UdpListener implements Runnable {
                     byte[] completeAudioPayload = audioStreamBuffer.toByteArray();
                     System.out.println(
                             "[+] Stream complete! Captured " + completeAudioPayload.length + " bytes of raw audio.");
+
+                    if (App.DUMP_PCM && completeAudioPayload.length > 0) {
+                        String dumpPath = "/home/evanm/Documents/jarvis-pcm/"
+                                + System.currentTimeMillis() + "_" + senderIp.replace(".", "-") + ".pcm";
+                        try {
+                            java.nio.file.Files.createDirectories(java.nio.file.Paths.get("/home/evanm/Documents/jarvis-pcm"));
+                            java.nio.file.Files.write(java.nio.file.Paths.get(dumpPath), completeAudioPayload);
+                            System.out.println("[+] PCM dumped to: " + dumpPath);
+                        } catch (Exception e) {
+                            System.err.println("[-] Failed to dump PCM: " + e.getMessage());
+                        }
+                    }
 
                     // Validate audio format
                     AudioFormatValidator.isVoskCompatible(completeAudioPayload,

@@ -240,7 +240,7 @@ public class IntentParser {
             + "|kill (?:him|kilometers) (?:his iq|is it|is a)"
             + "|kill amelia"
             + "|kill a kill music"
-            + "|kill in iraq"
+            + "|kill (?:in|them) iraq"
             + "|telling good luck)\\b",                     "kill the music"   },
 
             // --- "play meme music" mishearings ---

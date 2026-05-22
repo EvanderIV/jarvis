@@ -49,13 +49,18 @@ const double SILENCE_THRESHOLD = 280.0;
 const int MAX_SILENCE_CHUNKS = 30; // Stop streaming after ~1.5 seconds of silence
 
 // --- HIGH-PASS FILTER CONFIG ---
-// Removes low-frequency rumble (footsteps, vibrations) before RMS is calculated.
-// Footstep energy is typically below 100 Hz; speech starts at ~85 Hz but its
-// phonemic content (what triggers wake-word detection) lives above 250 Hz.
-// α = fs / (fs + 2π·fc) — at fc=150 Hz, fs=16000 Hz → α ≈ 0.9444
-const float HP_ALPHA = 0.9444f;
-static float hp_prev_input  = 0.0f;
-static float hp_prev_output = 0.0f;
+// 2nd-order Butterworth HPF at 80 Hz, fs=16000 Hz (bilinear transform, Q=1/√2).
+// −12 dB/oct rolloff vs the old 1st-order −6 dB/oct. Cuts rumble below 80 Hz
+// while preserving vowel fundamentals (100–300 Hz) that the 150 Hz 1st-order was trimming.
+// H(z) = (b0 + b1·z⁻¹ + b2·z⁻²) / (1 + a1·z⁻¹ + a2·z⁻²)
+// y[n] = b0·x[n] + b1·x[n-1] + b2·x[n-2] − a1·y[n-1] − a2·y[n-2]
+const float HP_B0 =  0.97800f;
+const float HP_B1 = -1.95600f;
+const float HP_B2 =  0.97800f;
+const float HP_A1 = -1.95553f;
+const float HP_A2 =  0.95649f;
+static float hp_x1 = 0.0f, hp_x2 = 0.0f;
+static float hp_y1 = 0.0f, hp_y2 = 0.0f;
 
 // --- AGC CONFIG ---
 // Dynamically adjusts gain each chunk to hit a target RMS, keeping speech loud
@@ -91,7 +96,7 @@ void setup_i2s() {
         .intr_alloc_flags = ESP_INTR_FLAG_LEVEL1,
         .dma_buf_count = 8,   // INCREASED: Gives the ESP32 more hardware headroom
         .dma_buf_len = 1024,  // INCREASED: Prevents audio dropping while flushing the pre-roll
-        .use_apll = false
+        .use_apll = true      // APLL eliminates APB clock jitter at PDM rates → cleaner high-freq
     };
 
     i2s_pin_config_t pin_config = {
@@ -350,9 +355,9 @@ void apply_highpass_filter(uint8_t* buffer, size_t bytes_read) {
     int num_samples = bytes_read / 2;
     for (int i = 0; i < num_samples; i++) {
         float x = (float)samples[i];
-        float y = HP_ALPHA * (hp_prev_output + x - hp_prev_input);
-        hp_prev_input  = x;
-        hp_prev_output = y;
+        float y = HP_B0*x + HP_B1*hp_x1 + HP_B2*hp_x2 - HP_A1*hp_y1 - HP_A2*hp_y2;
+        hp_x2 = hp_x1;  hp_x1 = x;
+        hp_y2 = hp_y1;  hp_y1 = y;
         if (y >  32767.0f) y =  32767.0f;
         if (y < -32768.0f) y = -32768.0f;
         samples[i] = (int16_t)y;
@@ -497,8 +502,8 @@ void loop() {
             chunks_in_buffer = 0; // Clear memory so we don't resend old EOF silence next time!
 
             // Reset filter states so residual streaming audio doesn't bleed into the next trigger
-            hp_prev_input  = 0.0f;
-            hp_prev_output = 0.0f;
+            hp_x1 = 0.0f;  hp_x2 = 0.0f;
+            hp_y1 = 0.0f;  hp_y2 = 0.0f;
             pe_prev_sample = 0.0f;
 
             // Briefly clear the I2S DMA buffer to avoid processing any hardware noise generated during the flash

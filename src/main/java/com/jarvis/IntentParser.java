@@ -211,7 +211,7 @@ public class IntentParser {
             { "\\bkill(?:ed|ing|er)\\b",                    "kill"             },
 
             // --- "play" phonetic corrections (Vosk mishearings) ---
-            { "\\b(?:plane|display|way|why)\\b",            "play"             },
+            { "\\b(?:plane|display|way|why|leave)\\b",       "play"             },
 
             // --- "play some music" mishearings ---
             { "\\b(?:playful music"

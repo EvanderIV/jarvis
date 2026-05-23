@@ -195,7 +195,8 @@ public class UdpListener implements Runnable {
                             System.out.println("[+] Vosk Transcription: " + transcribedText);
 
                             // Detect jarvis wake word to execute command and parse intent)
-                            if (transcribedText.toLowerCase().matches(".*" + jarvisRegex + ".*")
+                            if (transcribedText.isEmpty()
+                                    || transcribedText.toLowerCase().matches(".*" + jarvisRegex + ".*")
                                     || transcribedText.toLowerCase().matches(".*" + alternateWakeWordsRegex + ".*")) {
                                 IntentParser parser = new IntentParser();
                                 ParsedCommand command = parser.parse(cleanedText);

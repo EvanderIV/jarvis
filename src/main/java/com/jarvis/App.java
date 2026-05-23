@@ -13,7 +13,7 @@ public class App {
 
     // The port your ESP32s/Python spoofers will target
     private static final int WAKE_WORD_PORT = 3900;
-    public static String WAKE_WORD = "mycroft";
+    public static String WAKE_WORD = "jarvis";
 
     public static void main(String[] args) {
         List<String> argList = Arrays.asList(args);

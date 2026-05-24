@@ -18,6 +18,7 @@ com\jarvis\AudioAnalyzer$FadeoutInfo.class
 com\jarvis\RoutineEngine$RoutineBuilder.class
 com\jarvis\CommandFulfiller$1.class
 com\jarvis\MissingContextualTargetException.class
+com\jarvis\RoutineEngine$RoutineStep.class
 com\jarvis\RoutineEngine.class
 com\jarvis\App.class
 com\jarvis\UdpListener.class

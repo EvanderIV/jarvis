@@ -259,6 +259,10 @@ public class LmsController {
         return defaultVolumes.getOrDefault(macAddress, fallback);
     }
 
+    public String getAlias(String mac) {
+        return registeredSpeakers.get(mac);
+    }
+
     /**
      * Gets the current playback status of a player.
      * Returns a map containing playback info: "isPlaying", "currentFile",

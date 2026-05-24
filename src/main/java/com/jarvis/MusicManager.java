@@ -43,6 +43,13 @@ public class MusicManager {
     // Volume tracking for mute/unmute restore
     private final Map<String, Integer> savedVolumes = new HashMap<>();
 
+    // Tags (lowercase, no +/- prefix) that restrict playback to speakers whose alias contains the mapped substring
+    private static final Map<String, String> TAG_SPEAKER_RESTRICTIONS = new HashMap<>();
+    static {
+        TAG_SPEAKER_RESTRICTIONS.put("asmr", "bedroom");
+    }
+    private boolean speakerRestrictionActive = false;
+
     private Thread playbackMonitorThread = null;
     private volatile boolean isContinuousPlayEnabled = false;
     private volatile boolean shouldStopMonitoring = false;
@@ -196,6 +203,8 @@ public class MusicManager {
         this.playHistory.clear();
         this.isContinuousPlayEnabled = true;
         this.shouldStopMonitoring = false;
+
+        applySpeakerRestrictions(this.currentTheme);
 
         // Start or restart the playback monitor thread
         startPlaybackMonitor();
@@ -471,6 +480,7 @@ public class MusicManager {
             this.currentMinSpeed = minSpeed;
             this.currentMaxSpeed = maxSpeed;
             this.playHistory.clear();
+            applySpeakerRestrictions(newTheme);
         } else {
             playMusic(newTheme, targetMacs, minSpeed, maxSpeed);
         }
@@ -612,5 +622,51 @@ public class MusicManager {
             return true;
         }
         return false;
+    }
+
+    private void applySpeakerRestrictions(String theme) {
+        if (theme == null || theme.equalsIgnoreCase("default")) {
+            if (speakerRestrictionActive) restoreAllSpeakers();
+            return;
+        }
+
+        String restrictedAlias = null;
+        for (String tag : theme.toLowerCase().trim().split("\\s+")) {
+            String clean = tag.replaceAll("^[+-]", "");
+            if (TAG_SPEAKER_RESTRICTIONS.containsKey(clean)) {
+                restrictedAlias = TAG_SPEAKER_RESTRICTIONS.get(clean);
+                break;
+            }
+        }
+
+        List<String> allSpeakers = lmsController.getAllRegisteredSpeakers();
+
+        if (restrictedAlias != null) {
+            final String alias = restrictedAlias;
+            List<String> allowed = allSpeakers.stream()
+                    .filter(mac -> { String a = lmsController.getAlias(mac); return a != null && a.toLowerCase().contains(alias); })
+                    .collect(Collectors.toList());
+            List<String> toMute = allSpeakers.stream()
+                    .filter(mac -> !allowed.contains(mac))
+                    .collect(Collectors.toList());
+            if (!toMute.isEmpty()) {
+                lmsController.setVolume(toMute, 0);
+                System.out.println("[*] MusicManager: Muted " + toMute.size() + " speaker(s) for restricted theme (allowed: " + alias + ").");
+            }
+            this.targetMacs = allowed;
+            speakerRestrictionActive = true;
+        } else if (speakerRestrictionActive) {
+            restoreAllSpeakers();
+        }
+    }
+
+    private void restoreAllSpeakers() {
+        List<String> allSpeakers = lmsController.getAllRegisteredSpeakers();
+        for (String mac : allSpeakers) {
+            lmsController.setVolume(List.of(mac), lmsController.getDefaultVolume(mac, 60));
+        }
+        this.targetMacs = allSpeakers;
+        speakerRestrictionActive = false;
+        System.out.println("[*] MusicManager: Restored all speaker volumes after restricted theme ended.");
     }
 }

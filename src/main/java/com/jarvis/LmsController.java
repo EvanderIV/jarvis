@@ -263,6 +263,14 @@ public class LmsController {
         return registeredSpeakers.get(mac);
     }
 
+    public List<String> getSpeakersMatchingAlias(String substring) {
+        String lower = substring.toLowerCase();
+        return registeredSpeakers.entrySet().stream()
+                .filter(e -> e.getValue().toLowerCase().contains(lower))
+                .map(Map.Entry::getKey)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
     /**
      * Gets the current playback status of a player.
      * Returns a map containing playback info: "isPlaying", "currentFile",

@@ -20,10 +20,12 @@ public class CommandFulfiller {
     // Injected Controllers
     private final MusicManager musicManager;
     private final LmsController lmsController;
-    
-    public CommandFulfiller(MusicManager musicManager, LmsController lmsController) {
+    private final RoutineEngine routineEngine;
+
+    public CommandFulfiller(MusicManager musicManager, LmsController lmsController, RoutineEngine routineEngine) {
         this.musicManager = musicManager;
         this.lmsController = lmsController;
+        this.routineEngine = routineEngine;
         initializeCapabilities();
     }
 
@@ -166,6 +168,21 @@ public class CommandFulfiller {
 
     private CommandResult handlePlayMusic(ParsedCommand command) {
         String genre = command.parameter != null ? command.parameter : "default";
+
+        if ("asmr".equalsIgnoreCase(genre)) {
+            List<String> bedroomMacs = lmsController.getSpeakersMatchingAlias("bedroom");
+            if (bedroomMacs.isEmpty()) {
+                return new CommandResult(false, "No bedroom speaker registered — cannot start ASMR sleep routine.");
+            }
+            routineEngine.createRoutine(bedroomMacs)
+                    .setVolumeRatio(0.5)
+                    .playTheme(new String[] { "+ASMR" })
+                    .fadeVolumeRatio(0.5, 0.0, 3 * 60 * 60)
+                    .pausePlayback()
+                    .triggerNow();
+            return new CommandResult(true, "Starting ASMR sleep routine on bedroom speaker — fading to silence over 3 hours.");
+        }
+
         String message = String.format("Playing %s music on %s", genre, formatTargetName(command.target));
         System.out.println("[+] " + message);
 

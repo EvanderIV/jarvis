@@ -171,6 +171,13 @@ public class RoutineEngine {
             return this;
         }
 
+        public void triggerNow() {
+            System.out.printf("[+] Routine triggered immediately (%d steps).%n", steps.size());
+            for (RoutineStep step : steps) {
+                scheduler.schedule(step.action, step.delayFromTrigger, TimeUnit.SECONDS);
+            }
+        }
+
         public void build() {
             if (allowedDays.isEmpty()) {
                 System.out.println("[-] Routine has no allowed days — skipping schedule.");

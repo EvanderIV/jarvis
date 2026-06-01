@@ -26,10 +26,10 @@ public class App {
             // Pointing to eminich.com ensures it connects to your remote Linux server
             LmsController lmsController = new LmsController("127.0.0.1");
             MusicManager musicManager = new MusicManager(lmsController);
-            CommandFulfiller fulfiller = new CommandFulfiller(musicManager, lmsController);
 
             // 1.5. Initialize the Routine Engine and Schedule the Wake-Up Routine!
             RoutineEngine routineEngine = new RoutineEngine(lmsController, musicManager);
+            CommandFulfiller fulfiller = new CommandFulfiller(musicManager, lmsController, routineEngine);
             
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
                 .triggerAtTime(8, 0)
@@ -37,13 +37,13 @@ public class App {
                 .setVolumeRatio(0.0)
                 .playTheme(new String[] { "+Wakeup", "-Somber" }, 0, 3)
                 .fadeVolumeRatio(0.0, 0.33, 30)
-                .playTheme(new String[] { "+Relaxing", "Uplifting", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 2)
+                .playTheme(new String[] { "+Relaxing", "Uplifting", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
                 .fadeVolumeRatio(0.33, 1.0, 150)
                 .waitMinutes(2.5)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 2)
+                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
                 .waitMinutes(6)
                 .fadeVolumeRatio(1.0, 0.7, 120)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 2)
+                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 3)
                 .build();
 
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
@@ -52,13 +52,13 @@ public class App {
                 .setVolumeRatio(0.0)
                 .playTheme(new String[] { "+Wakeup", "-Somber" }, 0, 3)
                 .fadeVolumeRatio(0.0, 0.33, 30)
-                .playTheme(new String[] { "+Relaxing", "Uplifting", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 2)
+                .playTheme(new String[] { "+Relaxing", "Uplifting", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
                 .fadeVolumeRatio(0.33, 1.0, 150)
                 .waitMinutes(2.5)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 2)
+                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
                 .waitMinutes(6)
                 .fadeVolumeRatio(1.0, 0.7, 120)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 2)
+                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 3)
                 .build();
 
             // 2. Open the central UDP socket

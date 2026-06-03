@@ -200,7 +200,6 @@ public class MusicManager {
         this.currentMinSpeed = minSpeed;
         this.currentMaxSpeed = maxSpeed;
         this.targetMacs = new ArrayList<>(targetMacs);
-        this.playHistory.clear();
         this.isContinuousPlayEnabled = true;
         this.shouldStopMonitoring = false;
 
@@ -241,20 +240,18 @@ public class MusicManager {
                 .filter(track -> !playHistory.contains(track.file))
                 .collect(Collectors.toList());
 
-        // 3. If all tracks have been played, reset history (keep only the most recent)
+        // 3. If all theme-matching tracks are in history, evict oldest entries one at a time
+        //    until a track opens up — preserving as much cross-theme de-dupe coverage as possible.
         if (availableTracks.isEmpty()) {
-            if (!playHistory.isEmpty() && currentlyPlayingFile != null) {
-                System.out.println("[*] MusicManager: All tracks exhausted, resetting history (keeping most recent).");
-                playHistory.clear();
-                playHistory.add(currentlyPlayingFile);
-
-                // Re-filter for available tracks
+            System.out.println("[*] MusicManager: All tracks exhausted for theme '" + currentTheme + "', evicting oldest history entries.");
+            java.util.Iterator<String> oldest = playHistory.iterator();
+            while (oldest.hasNext() && availableTracks.isEmpty()) {
+                oldest.next();
+                oldest.remove();
                 availableTracks = matches.stream()
                         .filter(track -> !playHistory.contains(track.file))
                         .collect(Collectors.toList());
             }
-
-            // If still no available tracks, allow all
             if (availableTracks.isEmpty()) {
                 availableTracks = matches;
             }
@@ -479,7 +476,6 @@ public class MusicManager {
             this.currentTheme = newTheme;
             this.currentMinSpeed = minSpeed;
             this.currentMaxSpeed = maxSpeed;
-            this.playHistory.clear();
             applySpeakerRestrictions(newTheme);
         } else {
             playMusic(newTheme, targetMacs, minSpeed, maxSpeed);
@@ -523,7 +519,6 @@ public class MusicManager {
         currentTheme = null;
         currentlyPlayingFile = null;
         currentTrackFadeoutTimestamp = -1;
-        playHistory.clear();
 
         // An empty list tells the LmsController to stop playback on ALL registered
         // speakers

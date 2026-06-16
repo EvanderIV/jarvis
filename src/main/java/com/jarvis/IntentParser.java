@@ -244,6 +244,7 @@ public class IntentParser {
             + "|give (?:the )?his it"
             + "|still needs it"
             + "|still amazing"
+            + "|killed? a medic"
             + "|telling good luck)\\b",                     "kill the music"   },
 
             // --- "play meme music" mishearings ---

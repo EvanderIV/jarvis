@@ -49,7 +49,7 @@ public class UdpListener implements Runnable {
 
         switch (App.WAKE_WORD) {
             case "echo":
-                wakeTriggers = new String[] { "echo", "ago", "go", "i go" };
+                wakeTriggers = new String[] { "echo", "ago", "go", "i go", "i can" };
                 break;
             case "alexa":
                 wakeTriggers = new String[] { "alexa", "lecture", "a lecture", "lecturn", "a lecturn", "elixir" };

@@ -32,7 +32,7 @@ public class App {
             CommandFulfiller fulfiller = new CommandFulfiller(musicManager, lmsController, routineEngine);
             
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
-                .triggerAtTime(8, 0)
+                .triggerAtTime(7, 0)
                 .onDays("MTWRF")
                 .setVolumeRatio(0.0)
                 .playTheme(new String[] { "+Wakeup", "-Somber" }, 0, 3)
@@ -43,7 +43,7 @@ public class App {
                 .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
                 .waitMinutes(6)
                 .fadeVolumeRatio(1.0, 0.7, 120)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 3)
+                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "Pensive", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 3)
                 .build();
 
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())

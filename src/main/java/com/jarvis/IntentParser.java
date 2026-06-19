@@ -248,6 +248,7 @@ public class IntentParser {
             + "|kill me that"
             + "|killing these it"
             + "|kill amazing"
+            + "|kill him me lick"
             + "|telling good luck)\\b",                     "kill the music"   },
 
             // --- "play meme music" mishearings ---

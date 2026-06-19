@@ -247,6 +247,7 @@ public class IntentParser {
             + "|killed? a medic"
             + "|kill me that"
             + "|killing these it"
+            + "|kill amazing"
             + "|telling good luck)\\b",                     "kill the music"   },
 
             // --- "play meme music" mishearings ---
@@ -305,6 +306,7 @@ public class IntentParser {
         List<String> theGame = Arrays.asList("lost the game");
         List<String> banter = new LinkedList<>();
         banter.addAll(theGame);
+        banter.addAll(jorkening);
         actionSynonyms.put(Action.BANTER, banter);
 
         // Map all the ways a user might refer to a specific device

@@ -249,6 +249,8 @@ public class IntentParser {
             + "|killing these it"
             + "|kill amazing"
             + "|kill him me lick"
+            + "|kilometers?"
+            + "|schofield(?: music)?"
             + "|telling good luck)\\b",                     "kill the music"   },
 
             // --- "play meme music" mishearings ---

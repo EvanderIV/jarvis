@@ -255,6 +255,7 @@ public class NestListener implements Runnable {
                             ackIds.add(msg.get("ackId").getAsString());
                             String data = new String(Base64.getDecoder().decode(
                                     msg.getAsJsonObject("message").get("data").getAsString()));
+                            if (App.DEBUG_MODE) System.out.println("[~] NestListener: Raw event: " + data);
                             handleEvent(data);
                         }
 

@@ -21,10 +21,10 @@ public class NestListener implements Runnable {
 
     private static final String CONFIG_FILE = "nest_config.json";
     private static final String TOKEN_URL = "https://oauth2.googleapis.com/token";
-    private static final String PERSON_EVENT  = "sdm.devices.events.CameraPerson.Event";
-    private static final String MOTION_EVENT  = "sdm.devices.events.CameraMotion.Event";
-    private static final String SOUND_EVENT   = "sdm.devices.events.CameraSound.Event";
-    private static final String CHIME_EVENT   = "sdm.devices.events.DoorbellChime.Event";
+    private static final String PERSON_EVENT  = "sdm.devices.events.CameraPerson.Person";
+    private static final String MOTION_EVENT  = "sdm.devices.events.CameraMotion.Motion";
+    private static final String SOUND_EVENT   = "sdm.devices.events.CameraSound.Sound";
+    private static final String CHIME_EVENT   = "sdm.devices.events.DoorbellChime.Chime";
     private static final int POLL_INTERVAL_MS = 5000;
     private static final int TOKEN_REFRESH_BUFFER_MS = 60_000;
 

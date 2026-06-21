@@ -106,7 +106,7 @@ public class NestListener implements Runnable {
                 + "&prompt=consent"
                 + "&client_id=" + config.clientId
                 + "&response_type=code"
-                + "&scope=https://www.googleapis.com/auth/sdm.service";
+                + "&scope=https://www.googleapis.com/auth/sdm.service+https://www.googleapis.com/auth/pubsub";
     }
 
     public void exchangeAuthCode(String code) {

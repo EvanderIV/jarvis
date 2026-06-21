@@ -72,6 +72,12 @@ public class App {
             // Start listening in the background
             listenerThread.start();
 
+            // 3.5. Start the Nest doorbell Pub/Sub listener (no-ops silently if nest_config.json is absent)
+            NestListener nestListener = new NestListener(musicManager, lmsController);
+            Thread nestThread = new Thread(nestListener);
+            nestThread.setDaemon(true);
+            nestThread.start();
+
             // Add a shutdown hook to close the socket cleanly if the server is killed
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.println("Shutting down server...");
@@ -116,6 +122,15 @@ public class App {
                     } catch (NumberFormatException e) {
                         System.out.println("[-] Invalid volume. Usage: volume <mac or alias> <level>");
                     }
+                } else if (parts[0].equals("nest-setup")) {
+                    if (nestListener.loadConfig()) {
+                        System.out.println("[*] Open this URL in a browser, log in, and grant permissions:");
+                        System.out.println("    " + nestListener.getAuthUrl());
+                        System.out.println("[*] After redirecting to google.com, copy the 'code=...' value from the URL.");
+                        System.out.println("[*] Then run: nest-auth <code>");
+                    }
+                } else if (parts[0].equals("nest-auth") && parts.length >= 2) {
+                    nestListener.exchangeAuthCode(parts[1]);
                 } else if (parts[0].equals("help")) {
                     System.out.println("Commands:");
                     System.out.println("  scan                      - Find new unregistered speakers on the network");
@@ -123,6 +138,8 @@ public class App {
                     System.out.println("  register <mac> <alias>    - Add a speaker to the trusted list");
                     System.out.println("  remove <mac>              - Remove a speaker from the trusted list");
                     System.out.println("  volume <target> <level>   - Set and save default volume for an alias or MAC (e.g., volume Bedroom 60)");
+                    System.out.println("  nest-setup                - Print the Nest OAuth authorization URL");
+                    System.out.println("  nest-auth <code>          - Exchange the OAuth code for tokens");
                     System.out.println("  exit                      - Shut down the server");
                 } else if (parts[0].equals("exit")) {
                     System.out.println("[*] Stopping UDP Listener...");

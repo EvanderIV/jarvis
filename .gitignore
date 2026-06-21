@@ -4,3 +4,4 @@ venv/
 Music/
 upload-music.ps1
 music-editor.py
+nest_config.json

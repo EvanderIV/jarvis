@@ -240,9 +240,13 @@ public class NestListener implements Runnable {
                 if (response.statusCode() == 401) {
                     System.out.println("[*] NestListener: 401 — forcing token refresh.");
                     refreshAccessToken();
-                } else if (response.statusCode() == 200) {
+                } else if (response.statusCode() != 200) {
+                    System.err.println("[-] NestListener: Unexpected poll status " + response.statusCode() + ": " + response.body());
+                } else {
                     JsonObject body = JsonParser.parseString(response.body()).getAsJsonObject();
-                    if (body.has("receivedMessages")) {
+                    if (!body.has("receivedMessages")) {
+                        if (App.DEBUG_MODE) System.out.println("[~] NestListener: Poll OK — no messages.");
+                    } else if (body.has("receivedMessages")) {
                         JsonArray messages = body.getAsJsonArray("receivedMessages");
                         JsonArray ackIds = new JsonArray();
 

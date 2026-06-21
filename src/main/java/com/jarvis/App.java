@@ -123,12 +123,7 @@ public class App {
                         System.out.println("[-] Invalid volume. Usage: volume <mac or alias> <level>");
                     }
                 } else if (parts[0].equals("nest-setup")) {
-                    if (nestListener.loadConfig()) {
-                        System.out.println("[*] Open this URL in a browser, log in, and grant permissions:");
-                        System.out.println("    " + nestListener.getAuthUrl());
-                        System.out.println("[*] After redirecting to google.com, copy the 'code=...' value from the URL.");
-                        System.out.println("[*] Then run: nest-auth <code>");
-                    }
+                    nestListener.printAuthUrl();
                 } else if (parts[0].equals("nest-auth") && parts.length >= 2) {
                     nestListener.exchangeAuthCode(parts[1]);
                 } else if (parts[0].equals("help")) {

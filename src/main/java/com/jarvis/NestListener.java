@@ -49,14 +49,13 @@ public class NestListener implements Runnable {
         long tokenExpiryMs = 0;
     }
 
-    public boolean loadConfig() {
+    private boolean loadConfigFile() {
         try {
             if (!Files.exists(Paths.get(CONFIG_FILE))) {
-                System.out.println("[-] NestListener: nest_config.json not found — skipping Nest integration.");
+                System.out.println("[-] NestListener: nest_config.json not found.");
                 return false;
             }
             config = gson.fromJson(Files.readString(Paths.get(CONFIG_FILE)), NestConfig.class);
-
             String envSecret = System.getenv("NEST_CLIENT_SECRET");
             if (envSecret != null && !envSecret.isEmpty()) {
                 config.clientSecret = envSecret;
@@ -64,16 +63,28 @@ public class NestListener implements Runnable {
                 System.err.println("[-] NestListener: No client secret — set NEST_CLIENT_SECRET env var.");
                 return false;
             }
-
-            if (config.refreshToken == null || config.refreshToken.isEmpty()) {
-                System.out.println("[-] NestListener: No refresh token. Use 'nest-setup' then 'nest-auth <code>'.");
-                return false;
-            }
             return true;
         } catch (Exception e) {
             System.err.println("[-] NestListener: Failed to load config: " + e.getMessage());
             return false;
         }
+    }
+
+    public boolean loadConfig() {
+        if (!loadConfigFile()) return false;
+        if (config.refreshToken == null || config.refreshToken.isEmpty()) {
+            System.out.println("[-] NestListener: No refresh token. Use 'nest-setup' then 'nest-auth <code>'.");
+            return false;
+        }
+        return true;
+    }
+
+    public void printAuthUrl() {
+        if (!loadConfigFile()) return;
+        System.out.println("[*] Open this URL in a browser, sign in, and grant permissions:");
+        System.out.println("    " + getAuthUrl());
+        System.out.println("[*] After redirecting to google.com, copy the 'code=' value from the URL.");
+        System.out.println("[*] Then run: nest-auth <code>");
     }
 
     private void saveConfig() {
@@ -96,6 +107,7 @@ public class NestListener implements Runnable {
     }
 
     public void exchangeAuthCode(String code) {
+        if (config == null && !loadConfigFile()) return;
         try {
             String body = "client_id=" + URLEncoder.encode(config.clientId, StandardCharsets.UTF_8)
                     + "&client_secret=" + URLEncoder.encode(config.clientSecret, StandardCharsets.UTF_8)

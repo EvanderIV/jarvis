@@ -14,6 +14,8 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.Base64;
 import java.util.List;
 
@@ -31,10 +33,16 @@ public class NestListener implements Runnable {
     private final HttpClient http = HttpClient.newHttpClient();
     private final Gson gson = new Gson();
     private volatile boolean running = true;
+    private final java.util.Set<String> seenThreadIds = java.util.Collections.newSetFromMap(
+        new java.util.LinkedHashMap<String, Boolean>() {
+            @Override protected boolean removeEldestEntry(java.util.Map.Entry<String, Boolean> eldest) { return size() > 50; }
+        }
+    );
 
     private final MusicManager musicManager;
     private final LmsController lmsController;
     private NestConfig config;
+    private volatile LocalDate lastPersonTriggerDate = null;
 
     public NestListener(MusicManager musicManager, LmsController lmsController) {
         this.musicManager = musicManager;
@@ -286,6 +294,10 @@ public class NestListener implements Runnable {
         try {
             JsonObject event = JsonParser.parseString(data).getAsJsonObject();
             if (!event.has("resourceUpdate")) return;
+
+            String threadId = event.has("eventThreadId") ? event.get("eventThreadId").getAsString() : null;
+            if (threadId != null && !seenThreadIds.add(threadId)) return;
+
             JsonObject events = event.getAsJsonObject("resourceUpdate").getAsJsonObject("events");
             if (events == null) return;
 
@@ -306,6 +318,17 @@ public class NestListener implements Runnable {
     }
 
     private void onPersonDetected() {
+        LocalTime now = LocalTime.now();
+        if (now.isBefore(LocalTime.of(13, 0)) || now.isAfter(LocalTime.of(19, 0))) {
+            if (App.DEBUG_MODE) System.out.println("[~] NestListener: Person detected outside 1300–1900 window, ignoring.");
+            return;
+        }
+        LocalDate today = LocalDate.now();
+        if (today.equals(lastPersonTriggerDate)) {
+            if (App.DEBUG_MODE) System.out.println("[~] NestListener: Person detection already triggered today, ignoring.");
+            return;
+        }
+        lastPersonTriggerDate = today;
         List<String> allSpeakers = lmsController.getAllRegisteredSpeakers();
         musicManager.playMusic("default", allSpeakers);
         for (String mac : allSpeakers) {

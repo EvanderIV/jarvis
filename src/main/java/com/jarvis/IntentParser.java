@@ -246,9 +246,11 @@ public class IntentParser {
             + "|still amazing"
             + "|killed? a medic"
             + "|kill me that"
+            + "|kill the news"
             + "|killing these it"
             + "|kill amazing"
             + "|kill him me lick"
+            + "|killing his"
             + "|kilometers?"
             + "|schofield(?: music)?"
             + "|telling good luck)\\b",                     "kill the music"   },

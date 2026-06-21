@@ -21,7 +21,10 @@ public class NestListener implements Runnable {
 
     private static final String CONFIG_FILE = "nest_config.json";
     private static final String TOKEN_URL = "https://oauth2.googleapis.com/token";
-    private static final String PERSON_EVENT = "sdm.devices.events.CameraPerson.Event";
+    private static final String PERSON_EVENT  = "sdm.devices.events.CameraPerson.Event";
+    private static final String MOTION_EVENT  = "sdm.devices.events.CameraMotion.Event";
+    private static final String SOUND_EVENT   = "sdm.devices.events.CameraSound.Event";
+    private static final String CHIME_EVENT   = "sdm.devices.events.DoorbellChime.Event";
     private static final int POLL_INTERVAL_MS = 5000;
     private static final int TOKEN_REFRESH_BUFFER_MS = 60_000;
 
@@ -257,9 +260,16 @@ public class NestListener implements Runnable {
             JsonObject events = event.getAsJsonObject("resourceUpdate").getAsJsonObject("events");
             if (events == null) return;
 
+            if (events.has(CHIME_EVENT)) {
+                System.out.println("[+] NestListener: Doorbell pressed!");
+            }
             if (events.has(PERSON_EVENT)) {
                 System.out.println("[+] NestListener: Person detected at front door!");
                 onPersonDetected();
+            } else if (events.has(MOTION_EVENT)) {
+                System.out.println("[+] NestListener: Motion detected at front door.");
+            } else if (events.has(SOUND_EVENT)) {
+                System.out.println("[+] NestListener: Sound detected at front door.");
             }
         } catch (Exception e) {
             System.err.println("[-] NestListener: Failed to parse event: " + e.getMessage());

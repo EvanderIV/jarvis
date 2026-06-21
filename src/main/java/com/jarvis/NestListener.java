@@ -138,6 +138,7 @@ public class NestListener implements Runnable {
     // Required by SDM API — events are not published until devices.list is called at least once.
     private void activateEvents() {
         try {
+            ensureValidToken();
             String url = "https://smartdevicemanagement.googleapis.com/v1/enterprises/"
                     + config.deviceAccessProjectId + "/devices";
             HttpRequest request = HttpRequest.newBuilder()
@@ -146,10 +147,33 @@ public class NestListener implements Runnable {
                     .GET()
                     .build();
             HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            System.out.println("[+] NestListener: Event activation call complete (status " + response.statusCode() + ").");
+            System.out.println("[+] NestListener: devices.list status " + response.statusCode());
+            if (response.statusCode() == 200) {
+                JsonObject body = JsonParser.parseString(response.body()).getAsJsonObject();
+                if (body.has("devices")) {
+                    JsonArray devices = body.getAsJsonArray("devices");
+                    System.out.println("[+] NestListener: " + devices.size() + " device(s) registered:");
+                    for (int i = 0; i < devices.size(); i++) {
+                        JsonObject device = devices.get(i).getAsJsonObject();
+                        String name = device.get("name").getAsString();
+                        String type = device.has("type") ? device.get("type").getAsString() : "unknown";
+                        System.out.println("    - " + type + " | " + name);
+                    }
+                } else {
+                    System.out.println("[-] NestListener: No devices found. Is the doorbell linked to this account?");
+                }
+            } else {
+                System.out.println("[-] NestListener: devices.list failed: " + response.body());
+            }
         } catch (Exception e) {
             System.err.println("[-] NestListener: Event activation call failed: " + e.getMessage());
         }
+    }
+
+    public void verify() {
+        if (config == null && !loadConfigFile()) return;
+        System.out.println("[*] NestListener: Running verification...");
+        activateEvents();
     }
 
     private void refreshAccessToken() {

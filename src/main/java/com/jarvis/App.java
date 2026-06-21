@@ -126,6 +126,8 @@ public class App {
                     nestListener.printAuthUrl();
                 } else if (parts[0].equals("nest-auth") && parts.length >= 2) {
                     nestListener.exchangeAuthCode(parts[1]);
+                } else if (parts[0].equals("nest-verify")) {
+                    nestListener.verify();
                 } else if (parts[0].equals("help")) {
                     System.out.println("Commands:");
                     System.out.println("  scan                      - Find new unregistered speakers on the network");
@@ -135,6 +137,7 @@ public class App {
                     System.out.println("  volume <target> <level>   - Set and save default volume for an alias or MAC (e.g., volume Bedroom 60)");
                     System.out.println("  nest-setup                - Print the Nest OAuth authorization URL");
                     System.out.println("  nest-auth <code>          - Exchange the OAuth code for tokens");
+                    System.out.println("  nest-verify               - List registered Nest devices and re-activate events");
                     System.out.println("  exit                      - Shut down the server");
                 } else if (parts[0].equals("exit")) {
                     System.out.println("[*] Stopping UDP Listener...");

@@ -433,12 +433,6 @@ public class MusicManager {
             return true;
         }
 
-        // If the player has switched to a different file, the track has finished
-        String currentFile = (String) status.get("currentFile");
-        if (currentFile != null && !currentlyPlayingFile.contains(currentFile)) {
-            return true;
-        }
-
         // Check if we've reached the fadeout point (pre-analyzed silent section)
         if (currentTrackFadeoutTimestamp > 0) {
             Double currentTime = (Double) status.get("time");

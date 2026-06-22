@@ -283,7 +283,6 @@ public class LmsController {
         if (response != null && response.has("result")) {
             JsonObject result = response.getAsJsonObject("result");
             status.put("isPlaying", result.has("can_seek") && !result.get("mode").getAsString().equals("stop"));
-            status.put("currentFile", result.has("current_title") ? result.get("current_title").getAsString() : null);
             status.put("mode", result.has("mode") ? result.get("mode").getAsString() : "stop");
             if (result.has("duration")) {
                 status.put("duration", result.get("duration").getAsDouble());

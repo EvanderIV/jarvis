@@ -32,7 +32,7 @@ public class App {
             CommandFulfiller fulfiller = new CommandFulfiller(musicManager, lmsController, routineEngine);
             
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
-                .triggerAtTime(7, 0)
+                .triggerAtTime(7, 50)
                 .onDays("MTWRF")
                 .setVolumeRatio(0.0)
                 .playTheme(new String[] { "+Wakeup", "-Somber" }, 0, 3)

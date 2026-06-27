@@ -248,6 +248,8 @@ public class IntentParser {
             + "|kill me that"
             + "|kill the news"
             + "|killing these it"
+            + "|killing it"
+            + "|kill me it"
             + "|kill amazing"
             + "|kill him me lick"
             + "|killing his"

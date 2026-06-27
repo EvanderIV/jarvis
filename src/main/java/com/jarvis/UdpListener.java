@@ -117,7 +117,7 @@ public class UdpListener implements Runnable {
                             String possibleEof = new String(audioPacket.getData(), 0, audioPacket.getLength(),
                                     StandardCharsets.UTF_8);
                             if (possibleEof.equals("STREAM_EOF")) {
-                                System.out.println("[+] Received STREAM_EOF.");
+                                //System.out.println("[+] Received STREAM_EOF.");
                                 break; // Break out of the audio loop, go back to waiting for triggers
                             }
 
@@ -133,8 +133,7 @@ public class UdpListener implements Runnable {
                     }
 
                     byte[] completeAudioPayload = audioStreamBuffer.toByteArray();
-                    System.out.println(
-                            "[+] Stream complete! Captured " + completeAudioPayload.length + " bytes of raw audio.");
+                    //System.out.println("[+] Stream complete! Captured " + completeAudioPayload.length + " bytes of raw audio.");
 
                     if (App.DUMP_PCM && completeAudioPayload.length > 0) {
                         String dumpPath = "/home/evanm/Documents/jarvis-pcm/"
@@ -153,12 +152,12 @@ public class UdpListener implements Runnable {
                             AudioFormatValidator.VOSK_SAMPLE_RATE,
                             AudioFormatValidator.VOSK_BITS_PER_SAMPLE,
                             AudioFormatValidator.VOSK_CHANNELS);
-                    long durationMs = AudioFormatValidator.calculateDurationMs(completeAudioPayload);
-                    System.out.println("[*] Audio duration: " + durationMs + " ms");
+                    //long durationMs = AudioFormatValidator.calculateDurationMs(completeAudioPayload);
+                    //System.out.println("[*] Audio duration: " + durationMs + " ms");
 
                     // Pass the captured audio to Vosk
                     if (voskModel != null && completeAudioPayload.length > 0) {
-                        System.out.println("[*] Normalizing and transcribing audio...");
+                        //System.out.println("[*] Normalizing and transcribing audio...");
                         byte[] audioToTranscribe = normalize(completeAudioPayload, 3000.0f);
                         try (Recognizer recognizer = new Recognizer(voskModel, 16000)) {
                             recognizer.acceptWaveForm(audioToTranscribe, audioToTranscribe.length);
@@ -238,7 +237,7 @@ public class UdpListener implements Runnable {
         if (rms < 10f) return pcm; // silence — skip
 
         float gain = Math.min(targetRms / rms, 4.0f);
-        System.out.printf("[*] Audio normalization: RMS=%.1f, gain=%.2fx%n", rms, gain);
+        //System.out.printf("[*] Audio normalization: RMS=%.1f, gain=%.2fx%n", rms, gain);
 
         byte[] out = new byte[pcm.length];
         ByteBuffer writeBuf = ByteBuffer.wrap(out).order(ByteOrder.LITTLE_ENDIAN);

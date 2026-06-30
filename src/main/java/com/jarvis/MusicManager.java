@@ -328,6 +328,7 @@ public class MusicManager {
         }, "AudioAnalysisThread");
 
         analysisThread.setDaemon(true);
+        analysisThread.setPriority(Thread.MIN_PRIORITY);
         analysisThread.start();
     }
 

@@ -191,7 +191,10 @@ public class AudioAnalyzer {
 
             // Build FFmpeg command: ffmpeg -i input.mp3 -acodec pcm_s16le -ar 44100
             // output.wav
+            // Run under 'nice' at the lowest priority so LMS audio streaming is never
+            // preempted by the analysis decode.
             ProcessBuilder pb = new ProcessBuilder(
+                    "nice", "-n", "19",
                     "ffmpeg",
                     "-i", sourcePath, // Input file
                     "-acodec", "pcm_s16le", // Audio codec (16-bit PCM)

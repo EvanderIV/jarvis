@@ -49,7 +49,7 @@ public class UdpListener implements Runnable {
 
         switch (App.WAKE_WORD) {
             case "echo":
-                wakeTriggers = new String[] { "echo", "ago", "go", "i go", "i can" };
+                wakeTriggers = new String[] { "echo", "ago", "go", "i go", "i can", "psycho" };
                 break;
             case "alexa":
                 wakeTriggers = new String[] { "alexa", "lecture", "a lecture", "lecturn", "a lecturn", "elixir" };
@@ -186,7 +186,7 @@ public class UdpListener implements Runnable {
                             overrideEndCasesForCommands = overrideEndCasesForCommands.substring(0,
                                     overrideEndCasesForCommands.length() - 1); // Remove last '|'
 
-                            String alternateWakeWordsRegex = "(?i)\\b(wake up daddy's home|wake up daddy home|we got daddy's home|we got daddy home|we've got daddy's home|we've got daddy home|"
+                            String alternateWakeWordsRegex = "(?i)\\b(wake up daddy's home|wake up daddy home|we got daddy's home|we got daddy home|we've got daddy's home|we've got daddy home|coachella music|"
                                     + overrideEndCasesForCommands + ")\\b";
 
                             String cleanedText = transcribedText.replaceAll(jarvisRegex, "").trim();

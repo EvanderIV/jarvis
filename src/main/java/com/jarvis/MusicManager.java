@@ -399,10 +399,12 @@ public class MusicManager {
             return false;
         }
 
-        // Give at least 2 seconds before considering a track finished
-        // (to avoid rapid re-queueing at start of playback)
+        // Wait at least 10 seconds before checking for track completion.
+        // LMS can take several seconds to transition from "stop" to "play" after
+        // receiving a playlist play command, so a shorter guard causes the monitor
+        // to see the loading gap as a finished track and immediately queue another.
         long elapsedTime = System.currentTimeMillis() - lastTrackStartTime;
-        if (elapsedTime < 2000) {
+        if (elapsedTime < 10000) {
             return false;
         }
 

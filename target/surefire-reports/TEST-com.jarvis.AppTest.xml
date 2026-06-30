@@ -15,7 +15,7 @@
     <property name="sun.java.launcher" value="SUN_STANDARD"/>
     <property name="user.country" value="US"/>
     <property name="sun.boot.library.path" value="C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot\bin"/>
-    <property name="sun.java.command" value="C:\Users\evanm\AppData\Local\Temp\surefire947654214666668472\surefirebooter11150073339088829503.jar C:\Users\evanm\AppData\Local\Temp\surefire947654214666668472 2026-06-27T14-26-53_833-jvmRun1 surefire12946385638829887579tmp surefire_010752292239843937918tmp"/>
+    <property name="sun.java.command" value="C:\Users\evanm\AppData\Local\Temp\surefire1066391698265816617\surefirebooter3546479613105233456.jar C:\Users\evanm\AppData\Local\Temp\surefire1066391698265816617 2026-06-30T08-22-14_503-jvmRun1 surefire5576581678146140531tmp surefire_016352127365517478074tmp"/>
     <property name="jdk.debug" value="release"/>
     <property name="surefire.test.class.path" value="C:\Users\evanm\Documents\jarvis\target\test-classes;C:\Users\evanm\Documents\jarvis\target\classes;C:\Users\evanm\.m2\repository\junit\junit\4.11\junit-4.11.jar;C:\Users\evanm\.m2\repository\org\hamcrest\hamcrest-core\1.3\hamcrest-core-1.3.jar;C:\Users\evanm\.m2\repository\com\google\code\gson\gson\2.10.1\gson-2.10.1.jar;C:\Users\evanm\.m2\repository\com\alphacephei\vosk\0.3.45\vosk-0.3.45.jar;C:\Users\evanm\.m2\repository\net\java\dev\jna\jna\5.13.0\jna-5.13.0.jar;"/>
     <property name="sun.cpu.endian" value="little"/>
@@ -30,7 +30,7 @@
     <property name="line.separator" value="&#10;"/>
     <property name="java.vm.specification.vendor" value="Oracle Corporation"/>
     <property name="java.specification.name" value="Java Platform API Specification"/>
-    <property name="surefire.real.class.path" value="C:\Users\evanm\AppData\Local\Temp\surefire947654214666668472\surefirebooter11150073339088829503.jar"/>
+    <property name="surefire.real.class.path" value="C:\Users\evanm\AppData\Local\Temp\surefire1066391698265816617\surefirebooter3546479613105233456.jar"/>
     <property name="user.script" value=""/>
     <property name="sun.management.compiler" value="HotSpot 64-Bit Tiered Compilers"/>
     <property name="java.runtime.version" value="25.0.2+10-LTS"/>

@@ -47,7 +47,7 @@ public class App {
                 .build();
 
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
-                .triggerAtTime(9, 0)
+                .triggerAtTime(9, 15)
                 .onDays("N")
                 .setVolumeRatio(0.0)
                 .playTheme(new String[] { "+Wakeup", "-Somber" }, 0, 3)

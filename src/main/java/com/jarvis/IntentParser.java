@@ -255,6 +255,7 @@ public class IntentParser {
             + "|go a music"
             + "|kill his iq"
             + "|kill amazing"
+            + "|kill(ing)? idzik"
             + "|kill him me lick"
             + "|killing his"
             + "|kilometers?"

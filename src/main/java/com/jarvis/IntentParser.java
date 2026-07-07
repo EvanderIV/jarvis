@@ -258,6 +258,7 @@ public class IntentParser {
             + "|kill(ing)? idzik"
             + "|kill him me lick"
             + "|killing his"
+            + "|kill him using"
             + "|kilometers?"
             + "|schofield(?: music)?"
             + "|telling good luck)\\b",                     "kill the music"   },

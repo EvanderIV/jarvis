@@ -6,11 +6,12 @@ public class ParsedCommand {
     // --- The "Tokens" (Enums) ---
     public enum Action {
         TURN_ON, TURN_OFF, INCREASE_VOLUME, DECREASE_VOLUME, PLAY_MUSIC, BANTER, UTILITY, SET_TIMER,
-        SET_ALARM, CANCEL_TIMER, UNKNOWN;
+        SET_ALARM, CANCEL_TIMER, ROUTINE, UNKNOWN;
 
         /** Actions that don't apply to a device and so need no target. */
         public boolean isGlobal() {
-            return this == SET_TIMER || this == SET_ALARM || this == CANCEL_TIMER || this == UTILITY;
+            return this == SET_TIMER || this == SET_ALARM || this == CANCEL_TIMER || this == UTILITY
+                    || this == ROUTINE;
         }
     }
 

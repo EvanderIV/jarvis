@@ -167,6 +167,12 @@ public class IntentParser {
                 "stop the timer", "turn off the timer", "kill the timer",
                 "cancel the alarm", "cancel alarm", "cancel my alarm", "cancel the alarms", "cancel all alarms",
                 "stop the alarm", "turn off the alarm", "turn the alarm off", "kill the alarm"));
+        // Voice-triggered routines. Parameter is the routine name; "nap" is the only one so far.
+        // Vosk variants ("naptime", "a as m or nap") come from running TTS through the model.
+        actionSynonyms.put(Action.ROUTINE, Arrays.asList(
+                "nap", "naptime", "nap time", "power nap", "take a nap", "start a nap", "start my nap",
+                "nap routine", "time for a nap", "asmr nap", "a s m r nap", "a as m r nap", "a s m or nap",
+                "a as m or nap"));
 
         List<String> getTime = Arrays.asList("what's the time", "what time is it", "current time", "tell me the time");
         List<String> getWeather = Arrays.asList("what's the weather", "what's the temperature", "current weather",
@@ -188,9 +194,9 @@ public class IntentParser {
                 "drug getting", "door getting", "door cunning",
                 "door to me", "door opening", "jorc opening", "jork opening",
                 "joking", "majorcan getting", "dorgan it", "jerk", "jerk opening", "jerk getting",
-                "chortling", "door kidding", "drawer getting");
+                "chortling", "door kidding", "drawer getting", "york and it");
         List<String> jorkening = generatePhrasePrefixes(jorkeningBase, "begin the ", "initiate the ", "begin ",
-                "initiate ", "the in the ", "the and the ");
+                "initiate ", "the in the ", "the and the ", "initiated ");
         List<String> theGame = Arrays.asList("lost the game");
         List<String> banter = new LinkedList<>();
         banter.addAll(theGame);
@@ -308,7 +314,10 @@ public class IntentParser {
         // Parameter formats: SET_TIMER -> total seconds, SET_ALARM -> ISO local date-time,
         // CANCEL_TIMER -> "timer", "alarm", or null for both.
         boolean alarmContext = foundAction == Action.SET_ALARM || normalizedText.contains(" alarm");
-        if (foundAction == Action.CANCEL_TIMER) {
+        if (foundAction == Action.ROUTINE) {
+            // Routines own their timing; don't let "minutes" in the phrase turn this into a timer
+            foundParameter = "nap";
+        } else if (foundAction == Action.CANCEL_TIMER) {
             foundParameter = normalizedText.contains(" alarm") ? "alarm"
                     : normalizedText.contains(" timer") ? "timer" : null;
         } else if (alarmContext && TimeExpressionParser.parseClockTime(normalizedText, LocalDateTime.now(clock)) != null) {

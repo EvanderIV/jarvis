@@ -1,0 +1,6 @@
+com\jarvis\RoutineEngineTest.class
+com\jarvis\TimerManagerTest.class
+com\jarvis\AppTest.class
+com\jarvis\IntentParserTest.class
+com\jarvis\RoutineEngineTest$RecordingMusicManager.class
+com\jarvis\TimeExpressionParserTest.class

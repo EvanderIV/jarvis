@@ -81,7 +81,7 @@ public class UdpListener implements Runnable {
                         "ineffa",
                         // ee-neff-uh (preferred)
                         "he never", "enough for", "enough off", "enough on", "enough i", "innova",
-                        "in a fact", "in a far", "ina far", "ina ah", "in a fuck",
+                        "in a fact", "in a far", "ina far", "ina ah", "in a fuck", "it never",
                         // eye-neff-uh
                         "i have never", "i have ever", "i an effort", "i never",
                         // ih-neff-uh

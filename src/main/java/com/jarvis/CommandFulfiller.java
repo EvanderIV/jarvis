@@ -115,6 +115,8 @@ public class CommandFulfiller {
                 return handleSetAlarm(command);
             case CANCEL_TIMER:
                 return handleCancelTimer(command);
+            case ROUTINE:
+                return handleRoutine(command);
             case BANTER:
                 return handleBanter(command);
             case UTILITY:
@@ -210,6 +212,27 @@ public class CommandFulfiller {
             lmsController.setVolume(List.of(mac), (int) Math.round(volumeRatio * speakerMax));
         }
 
+        return new CommandResult(true, message);
+    }
+
+    private CommandResult handleRoutine(ParsedCommand command) {
+        if (!"nap".equals(command.parameter)) {
+            return new CommandResult(false, "Unknown routine: " + command.parameter);
+        }
+        List<String> bedroomMacs = lmsController.getSpeakersMatchingAlias("bedroom");
+        if (bedroomMacs.isEmpty()) {
+            return new CommandResult(false, "No bedroom speaker registered — cannot start a nap.");
+        }
+        // Replace whatever was running (an earlier nap, a morning routine) with the nap
+        routineEngine.cancelActiveRoutines();
+        Routines.startNap(routineEngine, bedroomMacs, lmsController.getAllRegisteredSpeakers());
+
+        LocalDateTime wakeAt = LocalDateTime.now()
+                .plusMinutes(Routines.NAP_ASMR_MINUTES + Routines.NAP_FADE_MINUTES);
+        String message = String.format("Nap started: %d min of ASMR, %d min fade, wake-up music at %s.",
+                Routines.NAP_ASMR_MINUTES, Routines.NAP_FADE_MINUTES,
+                wakeAt.format(DateTimeFormatter.ofPattern("h:mm a")));
+        System.out.println("[+] " + message);
         return new CommandResult(true, message);
     }
 

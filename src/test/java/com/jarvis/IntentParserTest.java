@@ -83,6 +83,18 @@ public class IntentParserTest {
     }
 
     @Test
+    public void napTriggers() throws Exception {
+        // Phrasings as Vosk actually transcribed them
+        for (String text : new String[] { "start a nap", "naptime", "nap time", "power nap", "take a nap",
+                "start my nap", "time for a nap", "a as m or nap" }) {
+            ParsedCommand c = parser.parse(text);
+            assertEquals(text, Action.ROUTINE, c.action);
+            assertEquals(text, "nap", c.parameter);
+            assertTrue(text, c.isValid());
+        }
+    }
+
+    @Test
     public void utilityIsValidWithoutDevice() throws Exception {
         ParsedCommand c = parser.parse("what time is it");
         assertEquals(Action.UTILITY, c.action);

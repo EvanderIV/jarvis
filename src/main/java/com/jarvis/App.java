@@ -13,7 +13,7 @@ public class App {
 
     // The port your ESP32s/Python spoofers will target
     private static final int WAKE_WORD_PORT = 3900;
-    public static String WAKE_WORD = "ineffa";
+    public static String WAKE_WORD = "jarvis";
 
     public static void main(String[] args) {
         List<String> argList = Arrays.asList(args);
@@ -32,19 +32,10 @@ public class App {
             TimerManager timerManager = new TimerManager(lmsController, musicManager);
             CommandFulfiller fulfiller = new CommandFulfiller(musicManager, lmsController, routineEngine, timerManager);
             
-            routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
+            // Weekday wake-up — the sequence lives in Routines so voice-triggered naps reuse it
+            Routines.appendWakeupProtocol(routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
                 .triggerAtTime(7, 50)
-                .onDays("MTWRF")
-                .setVolumeRatio(0.0)
-                .playTheme(new String[] { "+Wakeup", "-Somber" }, 0, 3)
-                .fadeVolumeRatio(0.0, 0.33, 30)
-                .playTheme(new String[] { "+Relaxing", "Uplifting", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
-                .fadeVolumeRatio(0.33, 1.0, 150)
-                .waitMinutes(2.5)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "-Epic", "-Somber", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
-                .waitMinutes(6)
-                .fadeVolumeRatio(1.0, 0.7, 120)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "Pensive", "-Epic", "-Somber", "-Meme", "-Profanity", "-Wakeup" }, 2, 3)
+                .onDays("MTWRF"))
                 .build();
 
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())

@@ -434,6 +434,19 @@ public class MusicManager {
         switchTheme(newTheme, targetMacs, 0, 4);
     }
 
+    /**
+     * switchTheme, but only if stillWanted is true once the lock is held. Routines use
+     * this so a step that was already running when the user said "kill the music"
+     * can't restart playback after the stop goes through.
+     */
+    public synchronized void switchThemeIf(java.util.function.BooleanSupplier stillWanted, String newTheme,
+            List<String> targetMacs, int minSpeed, int maxSpeed) {
+        if (!stillWanted.getAsBoolean()) {
+            return;
+        }
+        switchTheme(newTheme, targetMacs, minSpeed, maxSpeed);
+    }
+
     public synchronized void switchTheme(String newTheme, List<String> targetMacs, int minSpeed, int maxSpeed) {
         if (isContinuousPlayEnabled && currentlyPlayingFile != null) {
             System.out.println("[*] MusicManager: Queuing theme switch to '" + newTheme + "' after current track.");
@@ -480,6 +493,14 @@ public class MusicManager {
         // An empty list tells the LmsController to stop playback on ALL registered
         // speakers
         lmsController.stop(new ArrayList<>());
+
+        // Lift a speaker restriction (e.g. ASMR -> bedroom only) now, while nothing is
+        // playing. Otherwise it would be lifted by the next play request, which resets
+        // every speaker to its default volume right as that music starts — blasting a
+        // routine that wanted to fade in from silence.
+        if (speakerRestrictionActive) {
+            restoreAllSpeakers();
+        }
     }
 
     /**

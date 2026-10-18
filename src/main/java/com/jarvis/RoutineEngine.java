@@ -28,7 +28,9 @@ public class RoutineEngine {
     private final Set<RoutineRun> activeRuns = ConcurrentHashMap.newKeySet();
 
     public RoutineEngine(LmsController lmsController, MusicManager musicManager) {
-        this.scheduler = Executors.newScheduledThreadPool(2);
+        // One thread on purpose: steps due at the same moment (e.g. "volume to 0" then
+        // "play") must run in the order they were defined, never concurrently.
+        this.scheduler = Executors.newSingleThreadScheduledExecutor();
         this.lmsController = lmsController;
         this.musicManager = musicManager;
     }
@@ -191,6 +193,11 @@ public class RoutineEngine {
             return this;
         }
 
+        public RoutineBuilder waitSeconds(long seconds) {
+            this.accumulatedDelaySeconds += seconds;
+            return this;
+        }
+
         public RoutineBuilder setVolumeRatio(double ratio) {
             steps.add(new RoutineStep(accumulatedDelaySeconds, 0, run -> {
                 System.out.println("[*] Routine: Setting volume ratio " + ratio + " per speaker");
@@ -228,7 +235,7 @@ public class RoutineEngine {
             String themeName = String.join(" ", tags);
             steps.add(new RoutineStep(accumulatedDelaySeconds, 0, run -> {
                 System.out.println("[*] Routine: Switching to theme '" + themeName + "'...");
-                musicManager.switchTheme(themeName, targetMacs, minSpeed, maxSpeed);
+                musicManager.switchThemeIf(() -> !run.cancelled, themeName, targetMacs, minSpeed, maxSpeed);
             }));
             return this;
         }

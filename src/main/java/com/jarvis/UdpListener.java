@@ -7,6 +7,8 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.vosk.Model;
 import org.vosk.Recognizer;
@@ -16,7 +18,9 @@ import com.google.gson.JsonObject;
 
 public class UdpListener implements Runnable {
 
-    private final static int TIMEOUT_MS = 7000;
+    // Max gap between audio packets before we assume STREAM_EOF was lost. The node
+    // streams a chunk roughly every 50 ms (silence included) until it sends EOF.
+    private final static int TIMEOUT_MS = 2000;
     private final DatagramSocket socket;
     private volatile boolean running = true;
     private Model voskModel;
@@ -24,6 +28,18 @@ public class UdpListener implements Runnable {
     // Hold a persistent instance of the fulfiller so we don't reload the JSON on
     // every command
     private final CommandFulfiller fulfiller;
+
+    // One parser for the lifetime of the server so its target history ("turn it up"
+    // after "play music") carries over between commands. Only used on commandWorker.
+    private final IntentParser parser = new IntentParser();
+
+    // Parsing and fulfillment (LMS calls) run here so the listener can get straight
+    // back to answering wake-word triggers. Single thread keeps commands in order.
+    private final ExecutorService commandWorker = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "CommandWorker");
+        t.setDaemon(true);
+        return t;
+    });
 
     private static String[] wakeTriggers = { "jarvis", "jervis", "darvish", "dervish", "dervis", "garbage",
             "jurgen", "drivers", "travis", "harvest", "journalist", "german", "germans",
@@ -56,6 +72,21 @@ public class UdpListener implements Runnable {
                 break;
             case "mycroft":
                 wakeTriggers = new String[] { "mycroft", "microsoft", "my craft", "my draft", "my grabbed", "my dropped", "my shrugged", "my grab", "mike robbed" };
+                break;
+            case "ineffa":
+                // "Ineffa" isn't in the Vosk vocabulary, so it comes out as similar-sounding
+                // words. Variants below were collected by running synthesized speech of each
+                // pronunciation through the model; longer phrases first.
+                wakeTriggers = new String[] {
+                        "ineffa",
+                        // ee-neff-uh (preferred)
+                        "he never", "enough for", "enough off", "enough on", "enough i", "innova",
+                        "in a fact", "in a far", "ina far", "ina ah", "in a fuck",
+                        // eye-neff-uh
+                        "i have never", "i have ever", "i an effort", "i never",
+                        // ih-neff-uh
+                        "i each never", "each never", "i h never", "i'd never", "i've never",
+                        "and never", "in never", "in ever", "in africa", "in alpha", "in a for", "in for" };
                 break;
             case "cortana":
                 wakeTriggers = new String[] { "cortana", "cortona", "core kana", "court on a", "court on", "quarter", "we're gonna", "corker" };
@@ -113,6 +144,14 @@ public class UdpListener implements Runnable {
                             DatagramPacket audioPacket = new DatagramPacket(buffer, buffer.length);
                             socket.receive(audioPacket);
 
+                            // Ignore anything not from the node we're streaming from (another
+                            // node's trigger or audio would otherwise be spliced into this PCM).
+                            // That node never gets an ACK, so it loses arbitration as intended.
+                            if (audioPacket.getPort() != senderPort
+                                    || !audioPacket.getAddress().equals(packet.getAddress())) {
+                                continue;
+                            }
+
                             // Check if this packet is the EOF signal instead of audio data
                             String possibleEof = new String(audioPacket.getData(), 0, audioPacket.getLength(),
                                     StandardCharsets.UTF_8);
@@ -159,6 +198,7 @@ public class UdpListener implements Runnable {
                     if (voskModel != null && completeAudioPayload.length > 0) {
                         //System.out.println("[*] Normalizing and transcribing audio...");
                         byte[] audioToTranscribe = normalize(completeAudioPayload, 3000.0f);
+                        long recognizeStart = System.nanoTime();
                         try (Recognizer recognizer = new Recognizer(voskModel, 16000)) {
                             recognizer.acceptWaveForm(audioToTranscribe, audioToTranscribe.length);
 
@@ -191,33 +231,48 @@ public class UdpListener implements Runnable {
 
                             String cleanedText = transcribedText.replaceAll(jarvisRegex, "").trim();
 
-                            System.out.println("[+] Vosk Transcription: " + transcribedText);
+                            long audioMs = completeAudioPayload.length / 32; // 16 kHz * 2 bytes = 32 bytes/ms
+                            long recognizeMs = (System.nanoTime() - recognizeStart) / 1_000_000;
+                            System.out.println("[+] Vosk Transcription (" + audioMs + " ms audio, "
+                                    + recognizeMs + " ms to recognize): " + transcribedText);
 
                             // Detect jarvis wake word to execute command and parse intent)
                             if (transcribedText.isEmpty()
                                     || transcribedText.toLowerCase().matches(".*" + jarvisRegex + ".*")
                                     || transcribedText.toLowerCase().matches(".*" + alternateWakeWordsRegex + ".*")) {
-                                IntentParser parser = new IntentParser();
-                                ParsedCommand command = parser.parse(cleanedText);
-                                System.out.println("[+] Parsed Command: " + command);
-
-                                // Execute the command using the persistently loaded fulfiller
-                                CommandFulfiller.CommandResult result = fulfiller.fulfill(command);
-                                System.out.println(result);
+                                commandWorker.submit(() -> handleCommand(cleanedText));
                             }
                         }
                     }
                 }
 
-            } catch (MissingContextualTargetException e) {
-                System.err.println("[-] Parsing Error: " + e.getMessage());
-            } catch (CommandUnfulfillableException e) {
-                System.err.println("[-] Error in UDP listener: " + e.getMessage());
             } catch (Exception e) {
                 if (running) {
                     System.err.println("Error in UDP listener: " + e.getMessage());
                 }
             }
+        }
+    }
+
+    /** Runs a text command as if it had been spoken (admin console "say"). */
+    public void submitText(String text) {
+        commandWorker.submit(() -> handleCommand(text));
+    }
+
+    private void handleCommand(String cleanedText) {
+        try {
+            ParsedCommand command = parser.parse(cleanedText);
+            System.out.println("[+] Parsed Command: " + command);
+
+            // Execute the command using the persistently loaded fulfiller
+            CommandFulfiller.CommandResult result = fulfiller.fulfill(command);
+            System.out.println(result);
+        } catch (MissingContextualTargetException e) {
+            System.err.println("[-] Parsing Error: " + e.getMessage());
+        } catch (CommandUnfulfillableException e) {
+            System.err.println("[-] Error in command worker: " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("[-] Error in command worker: " + e);
         }
     }
 
@@ -252,5 +307,6 @@ public class UdpListener implements Runnable {
 
     public void stop() {
         this.running = false;
+        commandWorker.shutdown();
     }
 }

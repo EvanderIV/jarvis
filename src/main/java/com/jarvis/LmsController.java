@@ -26,7 +26,7 @@ public class LmsController {
     private final String rpcUrl;
     private final HttpClient httpClient;
     private final Gson gson;
-    private int requestId = 1;
+    private final java.util.concurrent.atomic.AtomicInteger requestId = new java.util.concurrent.atomic.AtomicInteger(1);
 
     // Security credentials
     private String authHeader = null;
@@ -358,7 +358,7 @@ public class LmsController {
      */
     private JsonObject sendRpcRequest(String playerId, List<String> commandArgs) {
         JsonObject payload = new JsonObject();
-        payload.addProperty("id", requestId++);
+        payload.addProperty("id", requestId.getAndIncrement());
         payload.addProperty("method", "slim.request");
 
         JsonArray params = new JsonArray();

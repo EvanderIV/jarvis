@@ -6,11 +6,16 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 public class RoutineEngine {
 
@@ -18,13 +23,52 @@ public class RoutineEngine {
     private final LmsController lmsController;
     private final MusicManager musicManager;
 
+    // Runs that have been triggered and still have steps pending. "Kill the music"
+    // cancels these; the daily schedule that spawns them is left alone.
+    private final Set<RoutineRun> activeRuns = ConcurrentHashMap.newKeySet();
+
     public RoutineEngine(LmsController lmsController, MusicManager musicManager) {
-        this.scheduler = Executors.newScheduledThreadPool(5);
+        this.scheduler = Executors.newScheduledThreadPool(2);
         this.lmsController = lmsController;
         this.musicManager = musicManager;
     }
 
     private static final int DEFAULT_VOLUME_FALLBACK = 60;
+    private static final long FADE_TICK_MS = 500;
+
+    /** One triggered execution of a routine; owns every future it scheduled. */
+    private static class RoutineRun {
+        private final List<ScheduledFuture<?>> futures = new ArrayList<>();
+        private volatile boolean cancelled = false;
+
+        synchronized void track(ScheduledFuture<?> future) {
+            futures.add(future);
+            if (cancelled) future.cancel(false);
+        }
+
+        synchronized void cancel() {
+            cancelled = true;
+            for (ScheduledFuture<?> f : futures) f.cancel(false);
+        }
+    }
+
+    /**
+     * Cancels every routine currently in progress (pending theme switches, fades,
+     * pauses). Scheduled future runs — e.g. tomorrow's wake-up — still happen.
+     * Returns how many runs were cancelled.
+     */
+    public int cancelActiveRoutines() {
+        int count = 0;
+        for (RoutineRun run : activeRuns) {
+            run.cancel();
+            count++;
+        }
+        activeRuns.clear();
+        if (count > 0) {
+            System.out.println("[*] RoutineEngine: Cancelled " + count + " active routine(s).");
+        }
+        return count;
+    }
 
     /**
      * Returns seconds until the next occurrence of targetTime on any of the allowedDays.
@@ -43,38 +87,59 @@ public class RoutineEngine {
         return Duration.between(now, now.with(targetTime).plusDays(1)).getSeconds();
     }
 
-    public void fadeVolume(List<String> targetMacs, double startRatio, double endRatio, int durationSeconds) {
-        int steps = durationSeconds * 2;
-        long delayBetweenStepsMs = 500;
+    /**
+     * Fades each speaker from startRatio to endRatio of its default volume. Runs as a
+     * single repeating task and only sends a command when a speaker's integer volume
+     * actually changes, so long fades stay cheap.
+     */
+    private void fadeVolume(List<String> targetMacs, double startRatio, double endRatio, int durationSeconds,
+            RoutineRun run) {
+        final long startNanos = System.nanoTime();
+        final long durationNanos = TimeUnit.SECONDS.toNanos(Math.max(0, durationSeconds));
+        final Map<String, Integer> lastSent = new HashMap<>();
+        final ScheduledFuture<?>[] self = new ScheduledFuture<?>[1];
 
-        for (int i = 0; i <= steps; i++) {
-            final int step = i;
-            long executionDelayMs = i * delayBetweenStepsMs;
-
-            scheduler.schedule(() -> {
-                if (!musicManager.isPlaying()) return;
-                double ratio = startRatio + (endRatio - startRatio) * ((double) step / steps);
+        Runnable tick = () -> {
+            double progress = durationNanos == 0 ? 1.0
+                    : Math.min(1.0, (System.nanoTime() - startNanos) / (double) durationNanos);
+            if (musicManager.isPlaying()) {
+                double ratio = startRatio + (endRatio - startRatio) * progress;
                 for (String mac : targetMacs) {
                     int speakerMax = lmsController.getDefaultVolume(mac, DEFAULT_VOLUME_FALLBACK);
                     int vol = (int) Math.round(ratio * speakerMax);
-                    try {
-                        lmsController.setVolume(List.of(mac), vol);
-                    } catch (Exception e) {
-                        System.err.println("[-] RoutineEngine Fade Error: " + e.getMessage());
+                    if (!Integer.valueOf(vol).equals(lastSent.get(mac))) {
+                        try {
+                            lmsController.setVolume(List.of(mac), vol);
+                            lastSent.put(mac, vol);
+                        } catch (Exception e) {
+                            System.err.println("[-] RoutineEngine Fade Error: " + e.getMessage());
+                        }
                     }
                 }
-            }, executionDelayMs, TimeUnit.MILLISECONDS);
+            }
+            if (progress >= 1.0) {
+                synchronized (self) {
+                    if (self[0] != null) self[0].cancel(false);
+                }
+            }
+        };
+
+        synchronized (self) {
+            self[0] = scheduler.scheduleAtFixedRate(tick, 0, FADE_TICK_MS, TimeUnit.MILLISECONDS);
         }
+        run.track(self[0]);
     }
 
     // Stored as a flat pair so RoutineBuilder (a non-static inner class) can hold them
     // without requiring Java 16+ static members in inner classes.
     private static class RoutineStep {
         final long delayFromTrigger;
-        final Runnable action;
+        final long durationSeconds; // how long the step keeps running after it starts (fades)
+        final Consumer<RoutineRun> action;
 
-        RoutineStep(long delayFromTrigger, Runnable action) {
+        RoutineStep(long delayFromTrigger, long durationSeconds, Consumer<RoutineRun> action) {
             this.delayFromTrigger = delayFromTrigger;
+            this.durationSeconds = durationSeconds;
             this.action = action;
         }
     }
@@ -127,8 +192,7 @@ public class RoutineEngine {
         }
 
         public RoutineBuilder setVolumeRatio(double ratio) {
-            final long stepDelay = accumulatedDelaySeconds;
-            steps.add(new RoutineStep(stepDelay, () -> {
+            steps.add(new RoutineStep(accumulatedDelaySeconds, 0, run -> {
                 System.out.println("[*] Routine: Setting volume ratio " + ratio + " per speaker");
                 for (String mac : targetMacs) {
                     int speakerMax = lmsController.getDefaultVolume(mac, DEFAULT_VOLUME_FALLBACK);
@@ -141,16 +205,15 @@ public class RoutineEngine {
         public RoutineBuilder fadeVolumeRatio(double startRatio, double endRatio, int durationSeconds) {
             final long stepDelay = accumulatedDelaySeconds;
             accumulatedDelaySeconds += durationSeconds;
-            steps.add(new RoutineStep(stepDelay, () -> {
+            steps.add(new RoutineStep(stepDelay, durationSeconds, run -> {
                 System.out.println("[*] Routine: Fading volume from ratio " + startRatio + " to " + endRatio);
-                fadeVolume(targetMacs, startRatio, endRatio, durationSeconds);
+                fadeVolume(targetMacs, startRatio, endRatio, durationSeconds, run);
             }));
             return this;
         }
 
         public RoutineBuilder pausePlayback() {
-            final long stepDelay = accumulatedDelaySeconds;
-            steps.add(new RoutineStep(stepDelay, () -> {
+            steps.add(new RoutineStep(accumulatedDelaySeconds, 0, run -> {
                 musicManager.stopMusic();
                 System.out.println("[*] Routine: Paused playback.");
             }));
@@ -163,8 +226,7 @@ public class RoutineEngine {
 
         public RoutineBuilder playTheme(String[] tags, int minSpeed, int maxSpeed) {
             String themeName = String.join(" ", tags);
-            final long stepDelay = accumulatedDelaySeconds;
-            steps.add(new RoutineStep(stepDelay, () -> {
+            steps.add(new RoutineStep(accumulatedDelaySeconds, 0, run -> {
                 System.out.println("[*] Routine: Switching to theme '" + themeName + "'...");
                 musicManager.switchTheme(themeName, targetMacs, minSpeed, maxSpeed);
             }));
@@ -173,9 +235,7 @@ public class RoutineEngine {
 
         public void triggerNow() {
             System.out.printf("[+] Routine triggered immediately (%d steps).%n", steps.size());
-            for (RoutineStep step : steps) {
-                scheduler.schedule(step.action, step.delayFromTrigger, TimeUnit.SECONDS);
-            }
+            startRun();
         }
 
         public void build() {
@@ -188,20 +248,34 @@ public class RoutineEngine {
             scheduleNextRun();
         }
 
+        private void startRun() {
+            RoutineRun run = new RoutineRun();
+            activeRuns.add(run);
+            long lastStepEnds = 0;
+            for (RoutineStep step : steps) {
+                run.track(scheduler.schedule(() -> {
+                    if (run.cancelled) return;
+                    try {
+                        step.action.accept(run);
+                    } catch (Exception e) {
+                        System.err.println("[-] Routine step failed: " + e.getMessage());
+                    }
+                }, step.delayFromTrigger, TimeUnit.SECONDS));
+                lastStepEnds = Math.max(lastStepEnds, step.delayFromTrigger + step.durationSeconds);
+            }
+            run.track(scheduler.schedule(() -> { activeRuns.remove(run); }, lastStepEnds + 1, TimeUnit.SECONDS));
+        }
+
         private void scheduleNextRun() {
             long delayUntilTrigger = calculateDelayUntilNext(
                     LocalTime.of(triggerHour, triggerMinute), allowedDays);
 
-            long maxStepDelay = steps.stream().mapToLong(s -> s.delayFromTrigger).max().orElse(0);
-
-            for (RoutineStep step : steps) {
-                long totalDelay = delayUntilTrigger + step.delayFromTrigger;
-                scheduler.schedule(step.action, totalDelay, TimeUnit.SECONDS);
-            }
-
-            // Reschedule for the next valid day once the last step finishes (60s buffer)
-            long nextRunDelay = delayUntilTrigger + maxStepDelay + 60;
-            scheduler.schedule(this::scheduleNextRun, nextRunDelay, TimeUnit.SECONDS);
+            scheduler.schedule(() -> {
+                System.out.printf("[+] Routine %02d:%02d starting (%d steps).%n", triggerHour, triggerMinute, steps.size());
+                startRun();
+                // Pick the next valid day once we're safely past this trigger minute.
+                scheduler.schedule(this::scheduleNextRun, 61, TimeUnit.SECONDS);
+            }, delayUntilTrigger, TimeUnit.SECONDS);
 
             System.out.printf("[+] Next routine run in %dh %dm%n",
                     delayUntilTrigger / 3600, (delayUntilTrigger % 3600) / 60);

@@ -5,7 +5,13 @@ public class ParsedCommand {
 
     // --- The "Tokens" (Enums) ---
     public enum Action {
-        TURN_ON, TURN_OFF, INCREASE_VOLUME, DECREASE_VOLUME, PLAY_MUSIC, BANTER, UTILITY, SET_TIMER, UNKNOWN
+        TURN_ON, TURN_OFF, INCREASE_VOLUME, DECREASE_VOLUME, PLAY_MUSIC, BANTER, UTILITY, SET_TIMER,
+        SET_ALARM, CANCEL_TIMER, UNKNOWN;
+
+        /** Actions that don't apply to a device and so need no target. */
+        public boolean isGlobal() {
+            return this == SET_TIMER || this == SET_ALARM || this == CANCEL_TIMER || this == UTILITY;
+        }
     }
 
     public enum Target {
@@ -23,7 +29,7 @@ public class ParsedCommand {
     }
 
     public boolean isValid() {
-        return action != Action.UNKNOWN && target != Target.UNKNOWN;
+        return action != Action.UNKNOWN && (target != Target.UNKNOWN || action.isGlobal());
     }
     
     @Override

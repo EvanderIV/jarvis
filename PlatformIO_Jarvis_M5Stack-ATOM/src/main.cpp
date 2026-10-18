@@ -78,6 +78,13 @@ static float agc_gain      = 3.0f;
 const float PE_COEFF        = 0.97f;
 static float pe_prev_sample = 0.0f;
 
+// --- OUTPUT GAIN CONFIG ---
+// Final fixed boost applied to the samples that get sent to the server. This runs
+// AFTER get_rms(), so the VAD thresholds, the LED brightness map, and the
+// "amplitude" field in the trigger JSON all still report the true acoustic level.
+// Purely a transmit-side level change so Vosk receives a hotter signal.
+const float OUTPUT_GAIN = 2.0f;
+
 enum State { LISTENING, WAITING_ACK, STREAMING };
 State currentState = LISTENING;
 int silence_counter = 0;
@@ -350,6 +357,17 @@ void apply_preemphasis(uint8_t* buffer, size_t bytes_read) {
     }
 }
 
+void apply_output_gain(uint8_t* buffer, size_t bytes_read) {
+    int16_t* samples = (int16_t*)buffer;
+    int num_samples = bytes_read / 2;
+    for (int i = 0; i < num_samples; i++) {
+        int32_t amplified = (int32_t)(samples[i] * OUTPUT_GAIN);
+        if (amplified >  32767) amplified =  32767;
+        if (amplified < -32768) amplified = -32768;
+        samples[i] = (int16_t)amplified;
+    }
+}
+
 void apply_highpass_filter(uint8_t* buffer, size_t bytes_read) {
     int16_t* samples = (int16_t*)buffer;
     int num_samples = bytes_read / 2;
@@ -374,6 +392,7 @@ void loop() {
     double rms = get_rms(audio_buffer, bytes_read);  // before AGC so VAD thresholds remain calibrated
     apply_agc(audio_buffer, bytes_read, rms);
     apply_preemphasis(audio_buffer, bytes_read);
+    apply_output_gain(audio_buffer, bytes_read);     // transmit-side only; `rms` above is already captured
 
     // --- PRE-ROLL MEMORY ---
     // Constantly record the last ~1 second of audio so the start of the wake word isn't clipped

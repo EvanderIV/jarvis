@@ -1,9 +1,11 @@
 com\jarvis\MusicManager$LibraryRoot.class
 com\jarvis\LmsController.class
+com\jarvis\FadeoutIndexer.class
 com\jarvis\CommandFulfiller.class
 com\jarvis\CommandUnfulfillableException.class
 com\jarvis\NestListener$1.class
 com\jarvis\AudioAnalyzer.class
+com\jarvis\RoutineEngine$1.class
 com\jarvis\ParsedCommand.class
 com\jarvis\RoutineEngine$RoutineBuilder.class
 com\jarvis\CommandFulfiller$1.class

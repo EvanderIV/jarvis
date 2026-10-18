@@ -1,10 +1,11 @@
 package com.jarvis;
 
+import java.time.Clock;
+import java.time.LocalDateTime;
 import java.util.Arrays;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.LinkedList;
 import java.util.Collections;
@@ -14,16 +15,19 @@ import com.jarvis.ParsedCommand.*;
 public class IntentParser {
 
     // --- The Lexer Dictionaries (Synonym Mapping) ---
-    private final Map<Action, List<String>> actionSynonyms = new HashMap<>();
-    private final Map<Target, List<String>> targetSynonyms = new HashMap<>();
+    // Insertion-ordered so ties between equally long synonyms resolve the same way every run.
+    private final Map<Action, List<String>> actionSynonyms = new LinkedHashMap<>();
+    private final Map<Target, List<String>> targetSynonyms = new LinkedHashMap<>();
 
     // NEW: A dictionary to map spoken descriptions to canonical genres
-    private final Map<String, List<String>> parameterMap = new HashMap<>();
+    private final Map<String, List<String>> parameterMap = new LinkedHashMap<>();
 
     // --- Context & Capabilities ---
     private final LinkedList<Target> targetHistory = new LinkedList<>();
     private static final int MAX_HISTORY = 5;
-    private final Map<Target, List<Action>> targetCapabilities = new HashMap<>();
+    private final Map<Target, List<Action>> targetCapabilities = new LinkedHashMap<>();
+
+    private final Clock clock;
 
     /**
      * Generates phrase combinations by prepending prefixes to base words
@@ -38,150 +42,6 @@ public class IntentParser {
             }
         }
         return result;
-    }
-
-    /**
-     * Converts an integer to its English word representation (e.g., 1 -> "one", 21
-     * -> "twenty one")
-     */
-    private String numberToEnglish(int num) {
-        String[] ones = { "", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine" };
-        String[] tens = { "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" };
-
-        if (num == 0)
-            return "zero";
-        if (num < 10)
-            return ones[num];
-        if (num < 20) {
-            String[] teens = { "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
-                    "sixteen", "seventeen", "eighteen", "nineteen" };
-            return teens[num - 10];
-        }
-        int ten = num / 10;
-        int one = num % 10;
-        return tens[ten] + (one > 0 ? " " + ones[one] : "");
-    }
-
-    /**
-     * Converts English number words to integers (e.g., "five" -> 5, "twenty three"
-     * -> 23)
-     * Used for fuzzy timer parsing when Vosk mishears the command
-     */
-    private Integer englishToNumber(String words) {
-        String[] ones = { "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine" };
-        String[] teens = { "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
-                "sixteen", "seventeen", "eighteen", "nineteen" };
-        String[] tens = { "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" };
-
-        words = words.toLowerCase().trim();
-
-        // Try direct match for single words
-        for (int i = 0; i < ones.length; i++) {
-            if (words.equals(ones[i]))
-                return i;
-        }
-        for (int i = 0; i < teens.length; i++) {
-            if (words.equals(teens[i]))
-                return i + 10;
-        }
-        for (int i = 0; i < tens.length; i++) {
-            if (words.equals(tens[i]))
-                return i * 10;
-        }
-
-        // Try compound numbers like "twenty three"
-        String[] parts = words.split("\\s+");
-        if (parts.length == 2) {
-            Integer tenVal = null;
-            Integer oneVal = null;
-
-            for (int i = 0; i < tens.length; i++) {
-                if (parts[0].equals(tens[i])) {
-                    tenVal = i * 10;
-                    break;
-                }
-            }
-            for (int i = 0; i < ones.length; i++) {
-                if (parts[1].equals(ones[i])) {
-                    oneVal = i;
-                    break;
-                }
-            }
-            if (tenVal != null && oneVal != null) {
-                return tenVal + oneVal;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Attempts to extract a timer command from garbled/bad parses.
-     * Looks for number words followed by "minute" keywords even if the full phrase
-     * isn't recognized.
-     * E.g., "german for the time of five minute please" -> extracts "5"
-     */
-    private String extractTimerParameter(String normalizedText) {
-        String[] timeKeywords = { "minute", "minutes", "sec", "secs", "second", "seconds", "hour", "hours" };
-        // String[] numberWords = { "zero", "one", "two", "three", "four", "five",
-        // "six", "seven", "eight", "nine",
-        // "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
-        // "seventeen", "eighteen", "nineteen", "twenty", "thirty", "forty", "fifty",
-        // "sixty" };
-
-        // Split text into words
-        String[] words = normalizedText.toLowerCase().split("\\s+");
-
-        // Look for patterns: [number word/digit] + [time keyword]
-        for (int i = 0; i < words.length - 1; i++) {
-            String currentWord = words[i].replaceAll("[^a-z0-9]", ""); // Remove punctuation
-            String nextWord = words[i + 1].replaceAll("[^a-z0-9]", "");
-
-            // Check if current word is a number or contains a digit
-            Integer num = null;
-            if (currentWord.matches("\\d+")) {
-                num = Integer.parseInt(currentWord);
-            } else {
-                num = englishToNumber(currentWord);
-            }
-
-            // Check if next word is a time keyword
-            if (num != null && num > 0 && num <= 60) {
-                for (String keyword : timeKeywords) {
-                    if (nextWord.startsWith(keyword)) {
-                        return String.valueOf(num);
-                    }
-                }
-            }
-        }
-
-        // Fallback: Also check if any number appears before a time keyword anywhere in
-        // the text
-        // This handles cases like "they were for five minutes" where there might be
-        // words between
-        String text = normalizedText.replaceAll("[^a-z0-9\\s]", "").toLowerCase();
-        Pattern numPattern = Pattern.compile(
-                "\\b(\\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty)\\b");
-        Matcher numMatcher = numPattern.matcher(text);
-
-        Pattern timePattern = Pattern.compile("\\b(minute|minutes|sec|secs|second|seconds|hour|hours)\\b");
-        Matcher timeMatcher = timePattern.matcher(text);
-
-        if (numMatcher.find() && timeMatcher.find()) {
-            // If a number appears before a time keyword, extract the first number found
-            String numStr = numMatcher.group(1);
-            Integer num = null;
-            if (numStr.matches("\\d+")) {
-                num = Integer.parseInt(numStr);
-            } else {
-                num = englishToNumber(numStr);
-            }
-            if (num != null && num > 0 && num <= 60) {
-                return String.valueOf(num);
-            }
-        }
-
-        return null;
     }
 
     /**
@@ -227,7 +87,7 @@ public class IntentParser {
             { "\\b(?:play acted music|question music)\\b",  "play active music"},
 
             // --- genre corrections ---
-            { "\\ba big music\\b",                          "epic music"       },
+            { "\\b(?:a big|ethnic) music\\b",               "epic music"       },
             { "\\b(?:lacking|rock) music\\b",               "relaxing music"   },
 
             // --- "kill the music" mishearings ---
@@ -258,6 +118,8 @@ public class IntentParser {
             + "|kill(ing)? idzik"
             + "|kill him me lick"
             + "|killing his"
+            + "|killing his dick"
+            + "|kill(?:ing) him (?:a )dick"
             + "|kill him using"
             + "|kilometers?"
             + "|schofield(?: music)?"
@@ -279,6 +141,12 @@ public class IntentParser {
     }
 
     public IntentParser() {
+        this(Clock.systemDefaultZone());
+    }
+
+    public IntentParser(Clock clock) {
+        this.clock = clock;
+
         // Map all the ways a user might phrase an action
         actionSynonyms.put(Action.TURN_ON, Arrays.asList("turn on", "enable", "start", "lights on", "activate",
                 "turn it on", "turn that on", "turn that thing on"));
@@ -292,6 +160,13 @@ public class IntentParser {
         List<String> setTimer = Arrays.asList("set a timer", "start a timer", "countdown", "remind me in",
                 "remind me to");
         actionSynonyms.put(Action.SET_TIMER, setTimer);
+        actionSynonyms.put(Action.SET_ALARM, Arrays.asList("set an alarm", "set alarm", "set the alarm",
+                "set a alarm", "wake me up at", "wake me at", "wake me up tomorrow", "remind me at"));
+        actionSynonyms.put(Action.CANCEL_TIMER, Arrays.asList(
+                "cancel the timer", "cancel timer", "cancel my timer", "cancel the timers", "cancel all timers",
+                "stop the timer", "turn off the timer", "kill the timer",
+                "cancel the alarm", "cancel alarm", "cancel my alarm", "cancel the alarms", "cancel all alarms",
+                "stop the alarm", "turn off the alarm", "turn the alarm off", "kill the alarm"));
 
         List<String> getTime = Arrays.asList("what's the time", "what time is it", "current time", "tell me the time");
         List<String> getWeather = Arrays.asList("what's the weather", "what's the temperature", "current weather",
@@ -371,16 +246,29 @@ public class IntentParser {
         parameterMap.put("cooking curry", Arrays.asList("curry cooking music", "curry the music", "curry cooking tunes", "liquor cooking music"));
         parameterMap.put("microwave popcorn", Arrays.asList("popcorn", "popcorn music", "popcorn cooking music"));
 
-        // Set param to the number of minutes for timers if they say "set a timer for 5
-        // minutes" or "remind me in 10 minutes"
-        for (int i = 1; i <= 60; i++) {
-            String numberWord = numberToEnglish(i);
-            parameterMap.put(Integer.toString(i), Arrays.asList(
-                    "remind me in " + numberWord + " minutes",
-                    "set a timer for " + numberWord + " minutes",
-                    "set a timer " + numberWord + " minutes",
-                    "countdown " + numberWord + " minutes"));
+        // Timer durations and alarm times are not listed here — TimeExpressionParser
+        // extracts them from the free text in parse().
+    }
+
+    /**
+     * Returns the key whose synonym is the longest phrase found in the text, so
+     * "turn off the alarm" beats "turn off" and "start a timer" beats "start".
+     * Ties go to the earlier key in insertion order.
+     */
+    private static <K> K longestMatch(Map<K, List<String>> dictionary, String paddedText, boolean wholeWord) {
+        K best = null;
+        int bestLength = 0;
+        for (Map.Entry<K, List<String>> entry : dictionary.entrySet()) {
+            for (String synonym : entry.getValue()) {
+                if (synonym.length() <= bestLength) continue;
+                String needle = wholeWord ? " " + synonym + " " : " " + synonym;
+                if (paddedText.contains(needle)) {
+                    best = entry.getKey();
+                    bestLength = synonym.length();
+                }
+            }
         }
+        return best;
     }
 
     /**
@@ -398,45 +286,12 @@ public class IntentParser {
             normalizedText = CORRECTION_PATTERNS[i].matcher(normalizedText).replaceAll(CORRECTION_REPLACEMENTS[i]);
         }
 
-        Action foundAction = Action.UNKNOWN;
-        Target foundTarget = Target.UNKNOWN;
-        String foundParameter = null;
-
-        // Lex the Action
-        for (Map.Entry<Action, List<String>> entry : actionSynonyms.entrySet()) {
-            for (String synonym : entry.getValue()) {
-                if (normalizedText.contains(" " + synonym + " ")) {
-                    foundAction = entry.getKey();
-                    break;
-                }
-            }
-            if (foundAction != Action.UNKNOWN)
-                break;
-        }
-
-        // Lex the Target (Device)
-        for (Map.Entry<Target, List<String>> entry : targetSynonyms.entrySet()) {
-            for (String synonym : entry.getValue()) {
-                if (normalizedText.contains(" " + synonym + " ")) {
-                    foundTarget = entry.getKey();
-                    break;
-                }
-            }
-            if (foundTarget != Target.UNKNOWN)
-                break;
-        }
-
-        // Lex the Parameter (e.g., Music Genre)
-        for (Map.Entry<String, List<String>> entry : parameterMap.entrySet()) {
-            for (String synonym : entry.getValue()) {
-                if (normalizedText.contains(" " + synonym + " ") || normalizedText.contains(" " + synonym)) {
-                    foundParameter = entry.getKey(); // Set the parameter to the canonical genre key
-                    break;
-                }
-            }
-            if (foundParameter != null)
-                break;
-        }
+        // Lex the Action, Target (Device) and Parameter (e.g., Music Genre)
+        Action foundAction = longestMatch(actionSynonyms, normalizedText, true);
+        Target foundTarget = longestMatch(targetSynonyms, normalizedText, true);
+        String foundParameter = longestMatch(parameterMap, normalizedText, false);
+        if (foundAction == null) foundAction = Action.UNKNOWN;
+        if (foundTarget == null) foundTarget = Target.UNKNOWN;
 
         // If they just said "play some music" with no genre, you can set a default
         if (foundParameter == null && foundAction == Action.PLAY_MUSIC) {
@@ -449,25 +304,34 @@ public class IntentParser {
             foundTarget = Target.SPEAKER_ARRAY;
         }
 
-        // --- Fuzzy Timer Detection ---
-        // If text contains strong timer keywords, treat as timer command (overrides
-        // other actions)
-        if (likelyTimerCommand(normalizedText)) {
-            foundAction = Action.SET_TIMER;
-            // Try to extract the time parameter if we haven't already
-            if (foundParameter == null) {
-                foundParameter = extractTimerParameter(normalizedText);
+        // --- Timers & Alarms ---
+        // Parameter formats: SET_TIMER -> total seconds, SET_ALARM -> ISO local date-time,
+        // CANCEL_TIMER -> "timer", "alarm", or null for both.
+        boolean alarmContext = foundAction == Action.SET_ALARM || normalizedText.contains(" alarm");
+        if (foundAction == Action.CANCEL_TIMER) {
+            foundParameter = normalizedText.contains(" alarm") ? "alarm"
+                    : normalizedText.contains(" timer") ? "timer" : null;
+        } else if (alarmContext && TimeExpressionParser.parseClockTime(normalizedText, LocalDateTime.now(clock)) != null) {
+            foundAction = Action.SET_ALARM;
+            foundParameter = TimeExpressionParser.parseClockTime(normalizedText, LocalDateTime.now(clock)).toString();
+        } else if (alarmContext || likelyTimerCommand(normalizedText) || foundAction == Action.SET_TIMER) {
+            // Fuzzy timer detection: strong timer keywords override other actions, which
+            // catches garbled transcriptions like "german for the time of five minute please".
+            // An alarm request with a duration ("alarm in twenty minutes") is really a timer.
+            Integer seconds = TimeExpressionParser.parseDurationSeconds(normalizedText);
+            if (seconds != null || !alarmContext) {
+                foundAction = Action.SET_TIMER;
+                foundParameter = seconds != null ? String.valueOf(seconds) : null;
+            } else {
+                foundAction = Action.SET_ALARM;
+                foundParameter = null;
             }
-        }
-        // If we found SET_TIMER but no parameter, try fuzzy extraction
-        else if (foundAction == Action.SET_TIMER && foundParameter == null) {
-            foundParameter = extractTimerParameter(normalizedText);
         }
 
         // --- Context Resolution ---
-        // Some actions (SET_TIMER, UTILITY) are global and don't require a device
+        // Some actions (timers, alarms, utilities) are global and don't require a device
         // target
-        boolean isGlobalAction = foundAction == Action.SET_TIMER || foundAction == Action.UTILITY;
+        boolean isGlobalAction = foundAction.isGlobal();
 
         // If we found an action but no explicit target, try to infer it from history
         if (foundTarget == Target.UNKNOWN && foundAction != Action.UNKNOWN && !isGlobalAction) {

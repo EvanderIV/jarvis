@@ -35,10 +35,10 @@ public class MusicManager {
     private int currentMinSpeed = 0;
     private int currentMaxSpeed = 4;
     private final Set<String> playHistory = new LinkedHashSet<>();
-    private List<String> targetMacs = new ArrayList<>();
-    private String currentlyPlayingFile = null;
-    private long lastTrackStartTime = 0;
-    private float currentTrackFadeoutTimestamp = -1; // Fadeout point for current track, or -1 if none detected
+    private volatile List<String> targetMacs = new ArrayList<>();
+    private volatile String currentlyPlayingFile = null;
+    private volatile long lastTrackStartTime = 0;
+    private volatile float currentTrackFadeoutTimestamp = -1; // Fadeout point for current track, or -1 if none detected
 
     // Volume tracking for mute/unmute restore
     private final Map<String, Integer> savedVolumes = new HashMap<>();
@@ -50,9 +50,11 @@ public class MusicManager {
     }
     private boolean speakerRestrictionActive = false;
 
-    private Thread playbackMonitorThread = null;
+    // Playback state is touched by the command worker, the playback monitor, routine
+    // and timer threads; public entry points synchronize on this MusicManager.
+    // The monitor thread exits as soon as it is no longer the one referenced here.
+    private volatile Thread playbackMonitorThread = null;
     private volatile boolean isContinuousPlayEnabled = false;
-    private volatile boolean shouldStopMonitoring = false;
 
     // --- Data Model for JSON Parsing ---
 
@@ -66,6 +68,9 @@ public class MusicManager {
         public List<String> genres;
         public List<String> moods;
         public int speed;
+        // Pre-computed offline by FadeoutIndexer and stored in music.json.
+        // null = never analyzed, -1 = analyzed with no fadeout, > 0 = skip point (seconds).
+        public Float fadeoutTimestamp;
     }
 
     // Inner class to bind logic tags with allowed speed ranges
@@ -189,7 +194,7 @@ public class MusicManager {
         playMusic(parameter, targetMacs, 0, 4);
     }
 
-    public void playMusic(String parameter, List<String> targetMacs, int minSpeed, int maxSpeed) {
+    public synchronized void playMusic(String parameter, List<String> targetMacs, int minSpeed, int maxSpeed) {
         if (library.isEmpty()) {
             System.out.println("[-] Cannot play music, library is empty.");
             return;
@@ -201,7 +206,6 @@ public class MusicManager {
         this.currentMaxSpeed = maxSpeed;
         this.targetMacs = new ArrayList<>(targetMacs);
         this.isContinuousPlayEnabled = true;
-        this.shouldStopMonitoring = false;
 
         applySpeakerRestrictions(this.currentTheme);
 
@@ -218,7 +222,7 @@ public class MusicManager {
      * If all tracks have been played, resets history (keeping only the most recent
      * track).
      */
-    private void playNextTrack() {
+    private synchronized void playNextTrack() {
         if (!isContinuousPlayEnabled || currentTheme == null) {
             return;
         }
@@ -266,10 +270,15 @@ public class MusicManager {
         // 5. Add to history
         addToHistory(selectedTrack.file);
 
-        // 6. Play the file IMMEDIATELY (don't wait for analysis)
+        // 6. Play the file IMMEDIATELY
         currentlyPlayingFile = fullPath;
         lastTrackStartTime = System.currentTimeMillis();
-        currentTrackFadeoutTimestamp = -1; // Mark as "not yet analyzed"
+        // Fadeout timestamp is pre-computed offline by FadeoutIndexer and stored in music.json.
+        // null = never analyzed, -1 = analyzed with no fadeout; both disable early-skip
+        // (only a value > 0 triggers the fadeout skip in hasTrackFinished()).
+        currentTrackFadeoutTimestamp = (selectedTrack.fadeoutTimestamp != null)
+                ? selectedTrack.fadeoutTimestamp
+                : -1f;
 
         // lmsController.unmute(targetMacs); // Pause functionality already prevents
         // sound output
@@ -284,10 +293,6 @@ public class MusicManager {
         }
 
         lmsController.playFile(targetMacs, fullPath);
-
-        // 7. Analyze audio for fadeout detection IN BACKGROUND (with automatic MP3
-        // conversion if needed)
-        spawnAnalysisThread(fullPath);
     }
 
     /**
@@ -304,80 +309,28 @@ public class MusicManager {
     }
 
     /**
-     * Spawns a background thread to analyze an audio file for fadeout detection.
-     * Uses automatic MP3-to-WAV conversion if needed.
-     * Updates currentTrackFadeoutTimestamp when analysis completes.
-     */
-    private void spawnAnalysisThread(String filePath) {
-        Thread analysisThread = new Thread(() -> {
-            if (App.DEBUG_MODE) {
-                System.out.println("[DEBUG] MusicManager: Analysis thread started for " + filePath);
-            }
-
-            AudioAnalyzer.FadeoutInfo fadeoutInfo = AudioAnalyzer.analyzeAudioWithConversion(filePath);
-
-            // Update the fadeout timestamp if still playing the same file
-            if (currentlyPlayingFile != null && currentlyPlayingFile.equals(filePath)) {
-                currentTrackFadeoutTimestamp = (fadeoutInfo != null) ? fadeoutInfo.fadeoutTimestamp : -1;
-
-                if (fadeoutInfo != null) {
-                    System.out.println("[*] MusicManager: Fadeout analysis complete at " +
-                            String.format("%.1f", fadeoutInfo.fadeoutTimestamp) + "s");
-                }
-            }
-        }, "AudioAnalysisThread");
-
-        analysisThread.setDaemon(true);
-        analysisThread.setPriority(Thread.MIN_PRIORITY);
-        analysisThread.start();
-    }
-
-    /**
      * Starts a background thread that monitors playback status and queues the next
      * track
      * when the current one finishes.
      */
-    private void startPlaybackMonitor() {
+    private synchronized void startPlaybackMonitor() {
         // If a monitor thread is already running, don't start a new one
         if (playbackMonitorThread != null && playbackMonitorThread.isAlive()) {
             return;
         }
 
-        playbackMonitorThread = new Thread(() -> {
+        Thread monitor = new Thread(() -> {
             System.out.println("[*] MusicManager: Playback monitor started.");
 
-            while (!shouldStopMonitoring && isContinuousPlayEnabled) {
+            while (playbackMonitorThread == Thread.currentThread() && isContinuousPlayEnabled) {
                 try {
                     // Check if current track has finished playing
+                    String fileAtCheck = currentlyPlayingFile;
                     if (hasTrackFinished()) {
-                        System.out.println("[*] MusicManager: Current track finished, queuing next...");
-                        playNextTrack();
+                        advanceIfStillCurrent(fileAtCheck);
                     }
 
-                    // Determine sleep duration based on time remaining in song
-                    long sleepDuration = 2000; // Default 2 seconds
-
-                    // Get speaker list for status check
-                    List<String> speakersToCheck = targetMacs;
-                    if (speakersToCheck.isEmpty()) {
-                        speakersToCheck = lmsController.getAllRegisteredSpeakers();
-                    }
-
-                    // If we have speakers, check status
-                    if (!speakersToCheck.isEmpty() && currentlyPlayingFile != null) {
-                        String firstSpeaker = speakersToCheck.get(0);
-                        Map<String, Object> status = lmsController.getPlaybackStatus(firstSpeaker);
-
-                        if (!status.isEmpty()) {
-                            // Could add custom sleep logic here for audio analysis in the future
-                        }
-                    }
-
-                    Thread.sleep(sleepDuration);
-
-                    if (shouldStopMonitoring || !isContinuousPlayEnabled) {
-                        break;
-                    }
+                    Thread.sleep(2000);
                 } catch (InterruptedException e) {
                     System.out.println("[*] MusicManager: Playback monitor interrupted.");
                     break;
@@ -387,8 +340,22 @@ public class MusicManager {
             System.out.println("[*] MusicManager: Playback monitor stopped.");
         }, "MusicPlaybackMonitor");
 
-        playbackMonitorThread.setDaemon(true);
-        playbackMonitorThread.start();
+        monitor.setDaemon(true);
+        playbackMonitorThread = monitor;
+        monitor.start();
+    }
+
+    /**
+     * Queues the next track only if nothing changed while we were polling LMS —
+     * otherwise a stop or a new play request that landed mid-poll would be undone.
+     */
+    private synchronized void advanceIfStillCurrent(String fileAtCheck) {
+        if (playbackMonitorThread != Thread.currentThread() || !isContinuousPlayEnabled
+                || fileAtCheck == null || !fileAtCheck.equals(currentlyPlayingFile)) {
+            return;
+        }
+        System.out.println("[*] MusicManager: Current track finished, queuing next...");
+        playNextTrack();
     }
 
     /**
@@ -467,7 +434,7 @@ public class MusicManager {
         switchTheme(newTheme, targetMacs, 0, 4);
     }
 
-    public void switchTheme(String newTheme, List<String> targetMacs, int minSpeed, int maxSpeed) {
+    public synchronized void switchTheme(String newTheme, List<String> targetMacs, int minSpeed, int maxSpeed) {
         if (isContinuousPlayEnabled && currentlyPlayingFile != null) {
             System.out.println("[*] MusicManager: Queuing theme switch to '" + newTheme + "' after current track.");
             this.currentTheme = newTheme;
@@ -482,7 +449,7 @@ public class MusicManager {
     /**
      * Stops currently playing music and disables continuous playback.
      */
-    public void stopMusic() {
+    public synchronized void stopMusic() {
         System.out.println("[*] MusicManager: Stopping playback and disabling continuous mode.");
 
         // Save the current volume from all target speakers before stopping
@@ -499,18 +466,11 @@ public class MusicManager {
         // }
         // }
 
-        // Disable continuous playback
+        // Disable continuous playback. Detaching the monitor (rather than joining it)
+        // makes it exit on its next wake-up without delaying the stop command; the
+        // lock guarantees it can't queue another track after this point.
         isContinuousPlayEnabled = false;
-        shouldStopMonitoring = true;
-
-        // Wait for the monitor thread to finish (with timeout)
-        if (playbackMonitorThread != null && playbackMonitorThread.isAlive()) {
-            try {
-                playbackMonitorThread.join(3000); // Wait up to 3 seconds
-            } catch (InterruptedException e) {
-                System.err.println("[-] Interrupted waiting for playback monitor to stop.");
-            }
-        }
+        playbackMonitorThread = null;
 
         // Clear state
         currentTheme = null;

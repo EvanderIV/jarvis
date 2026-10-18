@@ -13,7 +13,7 @@ public class App {
 
     // The port your ESP32s/Python spoofers will target
     private static final int WAKE_WORD_PORT = 3900;
-    public static String WAKE_WORD = "echo";
+    public static String WAKE_WORD = "ineffa";
 
     public static void main(String[] args) {
         List<String> argList = Arrays.asList(args);
@@ -29,7 +29,8 @@ public class App {
 
             // 1.5. Initialize the Routine Engine and Schedule the Wake-Up Routine!
             RoutineEngine routineEngine = new RoutineEngine(lmsController, musicManager);
-            CommandFulfiller fulfiller = new CommandFulfiller(musicManager, lmsController, routineEngine);
+            TimerManager timerManager = new TimerManager(lmsController, musicManager);
+            CommandFulfiller fulfiller = new CommandFulfiller(musicManager, lmsController, routineEngine, timerManager);
             
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
                 .triggerAtTime(7, 50)
@@ -40,10 +41,10 @@ public class App {
                 .playTheme(new String[] { "+Relaxing", "Uplifting", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
                 .fadeVolumeRatio(0.33, 1.0, 150)
                 .waitMinutes(2.5)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
+                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "-Epic", "-Somber", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
                 .waitMinutes(6)
                 .fadeVolumeRatio(1.0, 0.7, 120)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "Pensive", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 3)
+                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "Pensive", "-Epic", "-Somber", "-Meme", "-Profanity", "-Wakeup" }, 2, 3)
                 .build();
 
             routineEngine.createRoutine(lmsController.getAllRegisteredSpeakers())
@@ -52,13 +53,13 @@ public class App {
                 .setVolumeRatio(0.0)
                 .playTheme(new String[] { "+Wakeup", "-Somber" }, 0, 3)
                 .fadeVolumeRatio(0.0, 0.33, 30)
-                .playTheme(new String[] { "+Relaxing", "Uplifting", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
+                .playTheme(new String[] { "+Relaxing", "Uplifting", "Happy", "-Epic", "-Somber", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
                 .fadeVolumeRatio(0.33, 1.0, 150)
                 .waitMinutes(2.5)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
+                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "Uplifting", "-Epic", "-Somber", "-Meme", "-Profanity", "-Wakeup" }, 1, 2)
                 .waitMinutes(6)
                 .fadeVolumeRatio(1.0, 0.7, 120)
-                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "-Epic", "-Somber", "-Relaxing", "-Meme", "-Profanity", "-Wakeup" }, 2, 3)
+                .playTheme(new String[] { "+Upbeat", "Relaxing", "Happy", "-Epic", "-Somber", "-Meme", "-Profanity", "-Wakeup" }, 2, 3)
                 .build();
 
             // 2. Open the central UDP socket
@@ -128,6 +129,11 @@ public class App {
                     nestListener.exchangeAuthCode(parts[1]);
                 } else if (parts[0].equals("nest-verify")) {
                     nestListener.verify();
+                } else if (parts[0].equals("say") && parts.length >= 2) {
+                    triggerListener.submitText(input.substring(4).trim());
+                } else if (parts[0].equals("timers")) {
+                    java.util.List<String> active = timerManager.describeActive();
+                    System.out.println(active.isEmpty() ? "  (No timers or alarms set)" : "  " + String.join("\n  ", active));
                 } else if (parts[0].equals("help")) {
                     System.out.println("Commands:");
                     System.out.println("  scan                      - Find new unregistered speakers on the network");
@@ -138,6 +144,8 @@ public class App {
                     System.out.println("  nest-setup                - Print the Nest OAuth authorization URL");
                     System.out.println("  nest-auth <code>          - Exchange the OAuth code for tokens");
                     System.out.println("  nest-verify               - List registered Nest devices and re-activate events");
+                    System.out.println("  say <text>                - Run a command as if spoken (e.g., say set a timer for five minutes)");
+                    System.out.println("  timers                    - List pending timers and alarms");
                     System.out.println("  exit                      - Shut down the server");
                 } else if (parts[0].equals("exit")) {
                     System.out.println("[*] Stopping UDP Listener...");

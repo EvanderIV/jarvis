@@ -22,8 +22,12 @@ public class AudioAnalyzer {
                                                                      // volume to trigger fadeout private static final
     static int SAMPLE_BUFFER_SIZE = 4096; // Number of bytes to read at a time
 
-    // Cached fadeout info to avoid re-analyzing the same file
-    private static final java.util.Map<String, FadeoutInfo> fadeoutCache = new java.util.concurrent.ConcurrentHashMap<>();
+    // Cached fadeout info to avoid re-analyzing the same file.
+    // NOTE: must allow null values — a null entry means "analyzed, no fadeout detected".
+    // (ConcurrentHashMap forbids null values and would NPE on those; the containsKey
+    // guards below correctly distinguish an absent key from a cached-null value.)
+    private static final java.util.Map<String, FadeoutInfo> fadeoutCache =
+            java.util.Collections.synchronizedMap(new java.util.HashMap<>());
 
     /**
      * Analyzes an audio file and returns the timestamp where fadeout is detected.
@@ -141,8 +145,13 @@ public class AudioAnalyzer {
                 }
 
                 return result;
-            } catch (Exception analysisError) {
-                System.err.println("[-] AudioAnalyzer: Error analyzing converted file: " + analysisError.getMessage());
+            } catch (Throwable analysisError) {
+                System.err.println("[-] AudioAnalyzer: Error analyzing converted file '" + filePath + "': "
+                        + analysisError.getClass().getName()
+                        + (analysisError.getMessage() != null ? ": " + analysisError.getMessage() : ""));
+                if (App.DEBUG_MODE) {
+                    analysisError.printStackTrace();
+                }
                 fadeoutCache.put(filePath, null);
                 return null;
             } finally {
@@ -180,7 +189,11 @@ public class AudioAnalyzer {
             return null;
         }
 
-        String tempPath = sourcePath + ".analysis.wav";
+        // Write the temp WAV to the OS temp dir (NOT the music folder) so it can never
+        // trip an LMS "watch folder" rescan, and so this works identically on Windows.
+        String baseName = new File(sourcePath).getName();
+        String tempPath = new File(System.getProperty("java.io.tmpdir"),
+                baseName + "." + System.nanoTime() + ".analysis.wav").getAbsolutePath();
 
         try {
             // Check if ffmpeg is available
@@ -189,19 +202,26 @@ public class AudioAnalyzer {
                 return null;
             }
 
-            // Build FFmpeg command: ffmpeg -i input.mp3 -acodec pcm_s16le -ar 44100
-            // output.wav
-            // Run under 'nice' at the lowest priority so LMS audio streaming is never
-            // preempted by the analysis decode.
-            ProcessBuilder pb = new ProcessBuilder(
-                    "nice", "-n", "19",
-                    "ffmpeg",
-                    "-i", sourcePath, // Input file
-                    "-acodec", "pcm_s16le", // Audio codec (16-bit PCM)
-                    "-ar", "44100", // Audio rate (sample rate)
-                    "-y", // Overwrite output file without asking
-                    tempPath // Output file
-            );
+            // Build FFmpeg command: ffmpeg -i input.mp3 -acodec pcm_s16le -ar 44100 output.wav
+            boolean isWindows = System.getProperty("os.name", "").toLowerCase().contains("win");
+            List<String> command = new ArrayList<>();
+            if (!isWindows) {
+                // Linux/macOS only: run under 'nice' at the lowest priority so a server-side
+                // run never preempts anything else. ('nice' does not exist on Windows.)
+                command.add("nice");
+                command.add("-n");
+                command.add("19");
+            }
+            command.add("ffmpeg");
+            command.add("-i");
+            command.add(sourcePath);           // Input file
+            command.add("-acodec");
+            command.add("pcm_s16le");          // Audio codec (16-bit PCM)
+            command.add("-ar");
+            command.add("44100");              // Audio rate (sample rate)
+            command.add("-y");                 // Overwrite output file without asking
+            command.add(tempPath);             // Output file
+            ProcessBuilder pb = new ProcessBuilder(command);
 
             // Redirect stderr to suppress FFmpeg's verbose output
             pb.redirectErrorStream(true);

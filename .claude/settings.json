@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:developers.google.com)"
+      "WebFetch(domain:developers.google.com)",
+      "Bash(mvn -q compile)",
+      "Bash(ffmpeg -version)",
+      "Bash(rm -rf __TRACKED_VAR__/chtest)",
+      "Bash(mkdir -p __TRACKED_VAR__/chtest/jarvis-music)",
+      "Bash(ffmpeg -y -f lavfi -i \"sine=frequency=440:duration=15\" -ac 2 -ar 44100 stereo.flac)",
+      "Bash(ffmpeg -y -f lavfi -i \"sine=frequency=440:duration=15\" -ac 6 six_channel.flac)",
+      "Bash(ffmpeg -y -f lavfi -i \"sine=frequency=440:duration=15\" -ac 1 mono.flac)",
+      "Bash(python -c ' *)",
+      "Bash(python -m py_compile music-editor.py)",
+      "Bash(python \"C:\\\\Users\\\\evanm\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-evanm-Documents-jarvis\\\\4dd90092-c3e6-44d2-a71e-0e1878de33b2\\\\scratchpad\\\\test_preview.py\")"
     ]
   }
 }

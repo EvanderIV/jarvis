@@ -4,6 +4,7 @@
 #include <driver/i2s.h>
 #include <math.h>
 #include <FastLED.h>
+#include "secrets.h"  // WIFI_SSID / WIFI_PASSWORD — gitignored, see include/secrets.example.h
 
 // --- DEBUG / OFFLINE MODE ---
 // Set to true to skip Wi-Fi and UDP. It will emulate winning arbitration locally
@@ -11,8 +12,8 @@
 const bool DEBUG_OFFLINE_MODE = false;
 
 // --- NETWORK CONFIG ---
-const char* ssid = "ArchMinichs";
-const char* password = "Sh33pAndL!nuxBoys";
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
 const char* server_ip = "eminich.com";
 const int server_port = 3900;
 const char* node_id = "atom_echo_1";
@@ -28,6 +29,18 @@ WiFiUDP udp;
 #define SAMPLE_RATE 16000
 #define BUFFER_SIZE 1024
 uint8_t audio_buffer[BUFFER_SIZE];
+
+// --- CAPTURE / DECIMATION CONFIG ---
+// The ESP32's PDM→PCM converter only delivers clean audio up to ~1/4 of the configured rate;
+// above that it mirrors the signal (a tone at f also shows up at rate/2 − f). At 16 kHz that
+// folded everything above 4 kHz into a swirly "low-bitrate" image. So the mic runs at 32 kHz,
+// where the mirror sits above 8 kHz, and a windowed-sinc low-pass at 8 kHz removes it before
+// every other sample is dropped. Output is the same 512-sample 16 kHz chunks as before.
+#define CAPTURE_RATE 32000
+#define DECIM_TAPS   95  // Blackman window: passband to ~7.1 kHz, ≥74 dB stopband from ~8.9 kHz
+int16_t capture_buffer[BUFFER_SIZE];  // 1024 samples @ 32 kHz → 512 samples @ 16 kHz
+static float decim_taps[DECIM_TAPS];
+static float decim_hist[DECIM_TAPS - 1 + BUFFER_SIZE];  // previous chunk's tail + current chunk
 
 // --- PRE-ROLL BUFFER CONFIG ---
 // 16000Hz * 16-bit Mono = 32,000 bytes per second.
@@ -62,28 +75,48 @@ const float HP_A2 =  0.95649f;
 static float hp_x1 = 0.0f, hp_x2 = 0.0f;
 static float hp_y1 = 0.0f, hp_y2 = 0.0f;
 
+// --- HIGH-SHELF CONFIG ---
+// RBJ-cookbook high shelf (S=1). Lifts the consonant band (s, t, k, sh) by SHELF_GAIN_DB
+// while leaving vowels untouched. Replaces the old 0.97 first-difference pre-emphasis,
+// which is really a ~30 dB low cut rather than a shelf, and which Vosk's MFCC front end
+// already applies itself — stacking two of them tilted the spectrum far from what the
+// model was trained on. Coefficients are computed in init_high_shelf().
+const float SHELF_FREQ_HZ = 2500.0f;
+const float SHELF_GAIN_DB = 6.0f;
+static float hs_b0, hs_b1, hs_b2, hs_a1, hs_a2;
+static float hs_x1 = 0.0f, hs_x2 = 0.0f;
+static float hs_y1 = 0.0f, hs_y2 = 0.0f;
+
 // --- AGC CONFIG ---
 // Dynamically adjusts gain each chunk to hit a target RMS, keeping speech loud
 // regardless of mic distance. Alpha controls adaptation speed: higher = slower,
 // smoother (less pumping). Initial gain of 3.0 avoids a silent first chunk.
+// The AGC only adapts while someone is talking (rms > SILENCE_THRESHOLD); during silence it
+// holds, so it can't crank the noise floor up to max gain and then clip the next wake word.
 const float AGC_TARGET_RMS = 3000.0f;
 const float AGC_MAX_GAIN   = 10.0f;
 const float AGC_MIN_GAIN   = 1.0f;
 const float AGC_ALPHA      = 0.95f;
 static float agc_gain      = 3.0f;
 
-// --- PRE-EMPHASIS CONFIG ---
-// y[n] = x[n] - 0.97 * x[n-1]. Boosts high-frequency consonants (s, t, k, sh)
-// that ASR models rely on. Standard in speech recognition preprocessing.
-const float PE_COEFF        = 0.97f;
-static float pe_prev_sample = 0.0f;
-
 // --- OUTPUT GAIN CONFIG ---
-// Final fixed boost applied to the samples that get sent to the server. This runs
-// AFTER get_rms(), so the VAD thresholds, the LED brightness map, and the
+// Final fixed boost applied to the samples that get sent to the server. The VAD RMS is
+// measured before any gain, so the VAD thresholds, the LED brightness map, and the
 // "amplitude" field in the trigger JSON all still report the true acoustic level.
 // Purely a transmit-side level change so Vosk receives a hotter signal.
 const float OUTPUT_GAIN = 2.0f;
+
+// --- PEAK LIMITER CONFIG ---
+// The total gain (AGC × OUTPUT_GAIN) is capped per chunk so the chunk's loudest sample lands
+// at OUTPUT_CEILING instead of hard-clipping. Since the whole chunk is in memory, this is
+// look-ahead limiting: gain drops before the peak, not after. Gain reductions are instant;
+// recovery is limited to GAIN_RELEASE_PER_CHUNK (~1 dB per 32 ms chunk) to avoid pumping.
+const float OUTPUT_CEILING         = 29000.0f;  // ≈ −1 dBFS
+const float GAIN_RELEASE_PER_CHUNK = 1.12f;
+static float applied_gain          = 3.0f * OUTPUT_GAIN;
+
+// Float working buffer: the whole chain runs in float and is quantized to int16 once at the end.
+static float work_buffer[BUFFER_SIZE / 2];
 
 enum State { LISTENING, WAITING_ACK, STREAMING };
 State currentState = LISTENING;
@@ -96,7 +129,7 @@ void setup_i2s() {
     
     i2s_config_t i2s_config = {
         .mode = (i2s_mode_t)(I2S_MODE_MASTER | I2S_MODE_RX | I2S_MODE_PDM), // ATOM uses PDM mic
-        .sample_rate = SAMPLE_RATE,
+        .sample_rate = CAPTURE_RATE,
         .bits_per_sample = I2S_BITS_PER_SAMPLE_16BIT,
         .channel_format = I2S_CHANNEL_FMT_ONLY_RIGHT,
         .communication_format = I2S_COMM_FORMAT_STAND_I2S,
@@ -115,17 +148,53 @@ void setup_i2s() {
 
     i2s_driver_install(I2S_NUM_0, &i2s_config, 0, NULL);
     i2s_set_pin(I2S_NUM_0, &pin_config);
-    i2s_set_clk(I2S_NUM_0, SAMPLE_RATE, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
+    i2s_set_clk(I2S_NUM_0, CAPTURE_RATE, I2S_BITS_PER_SAMPLE_16BIT, I2S_CHANNEL_MONO);
 }
 
-double get_rms(uint8_t* buffer, size_t bytes_read) {
-    int16_t* samples = (int16_t*)buffer;
-    int num_samples = bytes_read / 2;
-    double sum = 0;
-    for (int i = 0; i < num_samples; i++) {
-        sum += samples[i] * samples[i];
+void init_decimator() {
+    // Half-band windowed sinc: cutoff at CAPTURE_RATE / 4 = 8 kHz, normalized to unity DC gain
+    const int M = DECIM_TAPS - 1;
+    float sum = 0.0f;
+    for (int i = 0; i < DECIM_TAPS; i++) {
+        float t    = i - M / 2.0f;
+        float sinc = (t == 0.0f) ? 1.0f : sinf(PI * 0.5f * t) / (PI * 0.5f * t);
+        float win  = 0.42f - 0.5f * cosf(2.0f * PI * i / M) + 0.08f * cosf(4.0f * PI * i / M);
+        decim_taps[i] = sinc * win;
+        sum += decim_taps[i];
     }
-    return sqrt(sum / num_samples);
+    for (int i = 0; i < DECIM_TAPS; i++) decim_taps[i] /= sum;
+}
+
+// Low-passes `n_in` samples at CAPTURE_RATE and keeps every other one, writing SAMPLE_RATE
+// samples to `out`. Returns the number of output bytes.
+size_t decimate(const int16_t* in, int n_in, int16_t* out) {
+    const int H = DECIM_TAPS - 1;
+    for (int i = 0; i < n_in; i++) decim_hist[H + i] = in[i];
+    int n_out = n_in / 2;
+    for (int j = 0; j < n_out; j++) {
+        const float* x = &decim_hist[2 * j];
+        float acc = 0.0f;
+        for (int k = 0; k < DECIM_TAPS; k++) acc += decim_taps[k] * x[k];
+        if (acc >  32767.0f) acc =  32767.0f;
+        if (acc < -32768.0f) acc = -32768.0f;
+        out[j] = (int16_t)lrintf(acc);
+    }
+    memmove(decim_hist, &decim_hist[n_in], H * sizeof(float));
+    return n_out * 2;
+}
+
+void init_high_shelf() {
+    float A     = powf(10.0f, SHELF_GAIN_DB / 40.0f);
+    float w0    = 2.0f * PI * SHELF_FREQ_HZ / SAMPLE_RATE;
+    float cw    = cosf(w0);
+    float alpha = sinf(w0) / 2.0f * sqrtf(2.0f);  // shelf slope S = 1
+    float sA    = 2.0f * sqrtf(A) * alpha;
+    float a0    = (A + 1) - (A - 1) * cw + sA;
+    hs_b0 =  A * ((A + 1) + (A - 1) * cw + sA) / a0;
+    hs_b1 = -2 * A * ((A - 1) + (A + 1) * cw) / a0;
+    hs_b2 =  A * ((A + 1) + (A - 1) * cw - sA) / a0;
+    hs_a1 =  2 * ((A - 1) - (A + 1) * cw) / a0;
+    hs_a2 =  ((A + 1) - (A - 1) * cw - sA) / a0;
 }
 
 void flash_init_led() {
@@ -309,6 +378,8 @@ void setup() {
     }
 
     // 2. Init Microphone
+    init_decimator();
+    init_high_shelf();
     setup_i2s();
 
     // Drain the PDM mic's DMA buffers for 500ms — the first reads after i2s_driver_install
@@ -326,73 +397,77 @@ void setup() {
     Serial.println("[+] Satellite is LIVE. Listening for noise...");
 }
 
-void apply_agc(uint8_t* buffer, size_t bytes_read, double chunk_rms) {
+// Runs HPF → high shelf → AGC/output gain (peak-limited) in float, then writes the result
+// back into `buffer` as int16. Returns the post-HPF, pre-gain RMS used by the VAD.
+double process_audio(uint8_t* buffer, size_t bytes_read) {
     int16_t* samples = (int16_t*)buffer;
     int num_samples = bytes_read / 2;
 
-    if (chunk_rms > 10.0) {
-        float desired = AGC_TARGET_RMS / (float)chunk_rms;
-        desired = constrain(desired, AGC_MIN_GAIN, AGC_MAX_GAIN);
-        agc_gain = AGC_ALPHA * agc_gain + (1.0f - AGC_ALPHA) * desired;
-    }
-
-    for (int i = 0; i < num_samples; i++) {
-        int32_t amplified = (int32_t)(samples[i] * agc_gain);
-        if (amplified >  32767) amplified =  32767;
-        if (amplified < -32768) amplified = -32768;
-        samples[i] = (int16_t)amplified;
-    }
-}
-
-void apply_preemphasis(uint8_t* buffer, size_t bytes_read) {
-    int16_t* samples = (int16_t*)buffer;
-    int num_samples = bytes_read / 2;
-    for (int i = 0; i < num_samples; i++) {
-        float x = (float)samples[i];
-        float y = x - PE_COEFF * pe_prev_sample;
-        pe_prev_sample = x;
-        if (y >  32767.0f) y =  32767.0f;
-        if (y < -32768.0f) y = -32768.0f;
-        samples[i] = (int16_t)y;
-    }
-}
-
-void apply_output_gain(uint8_t* buffer, size_t bytes_read) {
-    int16_t* samples = (int16_t*)buffer;
-    int num_samples = bytes_read / 2;
-    for (int i = 0; i < num_samples; i++) {
-        int32_t amplified = (int32_t)(samples[i] * OUTPUT_GAIN);
-        if (amplified >  32767) amplified =  32767;
-        if (amplified < -32768) amplified = -32768;
-        samples[i] = (int16_t)amplified;
-    }
-}
-
-void apply_highpass_filter(uint8_t* buffer, size_t bytes_read) {
-    int16_t* samples = (int16_t*)buffer;
-    int num_samples = bytes_read / 2;
+    // 1. High-pass + VAD level (same measurement point as before, so thresholds stay calibrated)
+    double sum = 0;
     for (int i = 0; i < num_samples; i++) {
         float x = (float)samples[i];
         float y = HP_B0*x + HP_B1*hp_x1 + HP_B2*hp_x2 - HP_A1*hp_y1 - HP_A2*hp_y2;
         hp_x2 = hp_x1;  hp_x1 = x;
         hp_y2 = hp_y1;  hp_y1 = y;
+        work_buffer[i] = y;
+        sum += (double)y * y;
+    }
+    double rms = sqrt(sum / num_samples);
+
+    // 2. High shelf, tracking the chunk peak for the limiter
+    float peak = 1.0f;
+    for (int i = 0; i < num_samples; i++) {
+        float x = work_buffer[i];
+        float y = hs_b0*x + hs_b1*hs_x1 + hs_b2*hs_x2 - hs_a1*hs_y1 - hs_a2*hs_y2;
+        hs_x2 = hs_x1;  hs_x1 = x;
+        hs_y2 = hs_y1;  hs_y1 = y;
+        work_buffer[i] = y;
+        float mag = fabsf(y);
+        if (mag > peak) peak = mag;
+    }
+
+    // 3. AGC (adapts only during speech) × fixed output gain, capped by the peak limiter
+    if (rms > SILENCE_THRESHOLD) {
+        float desired = AGC_TARGET_RMS / (float)rms;
+        desired = constrain(desired, AGC_MIN_GAIN, AGC_MAX_GAIN);
+        agc_gain = AGC_ALPHA * agc_gain + (1.0f - AGC_ALPHA) * desired;
+    }
+    float target_gain = fminf(agc_gain * OUTPUT_GAIN, OUTPUT_CEILING / peak);
+
+    float start_gain;
+    if (target_gain <= applied_gain) {
+        // Attack: drop immediately for this whole chunk so the peak can't clip
+        start_gain = target_gain;
+    } else {
+        // Release: ramp up across the chunk; every sample's gain stays <= target_gain
+        start_gain = applied_gain;
+        target_gain = fminf(target_gain, applied_gain * GAIN_RELEASE_PER_CHUNK);
+    }
+    float gain_step = (target_gain - start_gain) / num_samples;
+
+    // 4. Single quantization back to int16
+    float g = start_gain;
+    for (int i = 0; i < num_samples; i++) {
+        g += gain_step;
+        float y = work_buffer[i] * g;
         if (y >  32767.0f) y =  32767.0f;
         if (y < -32768.0f) y = -32768.0f;
-        samples[i] = (int16_t)y;
+        samples[i] = (int16_t)lrintf(y);
     }
+    applied_gain = target_gain;
+
+    return rms;
 }
 
 void loop() {
-    size_t bytes_read;
-    i2s_read(I2S_NUM_0, &audio_buffer, BUFFER_SIZE, &bytes_read, portMAX_DELAY);
+    size_t capture_bytes;
+    i2s_read(I2S_NUM_0, capture_buffer, sizeof(capture_buffer), &capture_bytes, portMAX_DELAY);
 
-    if (bytes_read == 0) return;
+    if (capture_bytes < 4) return;
+    size_t bytes_read = decimate(capture_buffer, (capture_bytes / 2) & ~1, (int16_t*)audio_buffer);
 
-    apply_highpass_filter(audio_buffer, bytes_read);
-    double rms = get_rms(audio_buffer, bytes_read);  // before AGC so VAD thresholds remain calibrated
-    apply_agc(audio_buffer, bytes_read, rms);
-    apply_preemphasis(audio_buffer, bytes_read);
-    apply_output_gain(audio_buffer, bytes_read);     // transmit-side only; `rms` above is already captured
+    double rms = process_audio(audio_buffer, bytes_read);  // rms is pre-gain so VAD thresholds remain calibrated
 
     // --- PRE-ROLL MEMORY ---
     // Constantly record the last ~1 second of audio so the start of the wake word isn't clipped
@@ -523,7 +598,8 @@ void loop() {
             // Reset filter states so residual streaming audio doesn't bleed into the next trigger
             hp_x1 = 0.0f;  hp_x2 = 0.0f;
             hp_y1 = 0.0f;  hp_y2 = 0.0f;
-            pe_prev_sample = 0.0f;
+            hs_x1 = 0.0f;  hs_x2 = 0.0f;
+            hs_y1 = 0.0f;  hs_y2 = 0.0f;
 
             // Briefly clear the I2S DMA buffer to avoid processing any hardware noise generated during the flash
             i2s_zero_dma_buffer(I2S_NUM_0);

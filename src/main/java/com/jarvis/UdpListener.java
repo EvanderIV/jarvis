@@ -284,14 +284,17 @@ public class UdpListener implements Runnable {
 
         ByteBuffer readBuf = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN);
         double sum = 0;
+        int peak = 1;
         for (int i = 0; i < numSamples; i++) {
             short s = readBuf.getShort(i * 2);
             sum += (double) s * s;
+            peak = Math.max(peak, Math.abs((int) s));
         }
         float rms = (float) Math.sqrt(sum / numSamples);
         if (rms < 10f) return pcm; // silence — skip
 
-        float gain = Math.min(targetRms / rms, 4.0f);
+        // Also cap by peak so the loudest sample lands at ~-1 dBFS instead of clipping
+        float gain = Math.min(Math.min(targetRms / rms, 4.0f), 29000f / peak);
         //System.out.printf("[*] Audio normalization: RMS=%.1f, gain=%.2fx%n", rms, gain);
 
         byte[] out = new byte[pcm.length];

@@ -1,6 +1,7 @@
 package com.jarvis;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -25,6 +26,9 @@ public class IntentParser {
     // --- Context & Capabilities ---
     private final LinkedList<Target> targetHistory = new LinkedList<>();
     private static final int MAX_HISTORY = 5;
+    private static final Duration HISTORY_TTL = Duration.ofMinutes(5);
+    private static final Pattern REFERS_BACK = Pattern.compile("\\b(?:it|that|them|those)\\b");
+    private LocalDateTime lastTargetAt = null;
     private final Map<Target, List<Action>> targetCapabilities = new LinkedHashMap<>();
 
     private final Clock clock;
@@ -342,9 +346,16 @@ public class IntentParser {
         // target
         boolean isGlobalAction = foundAction.isGlobal();
 
-        // If we found an action but no explicit target, try to infer it from history
+        // If we found an action but no explicit target, try to infer it from history —
+        // but only when the command refers back to something ("turn it up", "turn that
+        // off") and the last device was used recently. A bare verb overheard in
+        // conversation ("get a kill", "we played mario kart") must not act on whatever
+        // device happened to be used last.
+        boolean canUseHistory = REFERS_BACK.matcher(normalizedText).find()
+                && lastTargetAt != null
+                && Duration.between(lastTargetAt, LocalDateTime.now(clock)).compareTo(HISTORY_TTL) <= 0;
         if (foundTarget == Target.UNKNOWN && foundAction != Action.UNKNOWN && !isGlobalAction) {
-            for (Target historicalTarget : targetHistory) {
+            for (Target historicalTarget : canUseHistory ? targetHistory : Collections.<Target>emptyList()) {
                 List<Action> capabilities = targetCapabilities.getOrDefault(historicalTarget, Collections.emptyList());
                 if (capabilities.contains(foundAction)) {
                     foundTarget = historicalTarget;
@@ -368,6 +379,7 @@ public class IntentParser {
             if (targetHistory.size() > MAX_HISTORY) {
                 targetHistory.removeLast(); // Keep the backlog from ballooning
             }
+            lastTargetAt = LocalDateTime.now(clock);
         }
 
         return new ParsedCommand(foundAction, foundTarget, foundParameter);

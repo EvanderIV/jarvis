@@ -6,6 +6,7 @@ C:\Users\evanm\Documents\jarvis\src\main\java\com\jarvis\RoutineEngine.java
 C:\Users\evanm\Documents\jarvis\src\main\java\com\jarvis\UdpListener.java
 C:\Users\evanm\Documents\jarvis\src\main\java\com\jarvis\AudioFormatValidator.java
 C:\Users\evanm\Documents\jarvis\src\main\java\com\jarvis\FadeoutIndexer.java
+C:\Users\evanm\Documents\jarvis\src\main\java\com\jarvis\WakeWordMatcher.java
 C:\Users\evanm\Documents\jarvis\src\main\java\com\jarvis\MissingContextualTargetException.java
 C:\Users\evanm\Documents\jarvis\src\main\java\com\jarvis\AudioAnalyzer.java
 C:\Users\evanm\Documents\jarvis\src\main\java\com\jarvis\CommandUnfulfillableException.java

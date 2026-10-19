@@ -41,10 +41,7 @@ public class UdpListener implements Runnable {
         return t;
     });
 
-    private static String[] wakeTriggers = { "jarvis", "jervis", "darvish", "dervish", "dervis", "garbage",
-            "jurgen", "drivers", "travis", "harvest", "journalist", "german", "germans",
-            "georgia", "george", "jarred", "target", "judge", "your", "your this", "this",
-            "jerk", "jerks", "service", "dravid", "just", "turkish", "job", "josh", "john", "drugs" };
+    private final WakeWordMatcher wakeWordMatcher = new WakeWordMatcher(WakeWordMatcher.triggersFor(App.WAKE_WORD));
 
     // UPDATED CONSTRUCTOR: Now accepts the CommandFulfiller from App.java
     public UdpListener(DatagramSocket socket, CommandFulfiller fulfiller) {
@@ -61,43 +58,6 @@ public class UdpListener implements Runnable {
             System.err.println(
                     "[-] Failed to load Vosk model. Did you extract it to the 'model' directory in the project root?");
             e.printStackTrace();
-        }
-
-        switch (App.WAKE_WORD) {
-            case "echo":
-                wakeTriggers = new String[] { "echo", "ago", "go", "i go", "i can", "psycho" };
-                break;
-            case "alexa":
-                wakeTriggers = new String[] { "alexa", "lecture", "a lecture", "lecturn", "a lecturn", "elixir" };
-                break;
-            case "mycroft":
-                wakeTriggers = new String[] { "mycroft", "microsoft", "my craft", "my draft", "my grabbed", "my dropped", "my shrugged", "my grab", "mike robbed" };
-                break;
-            case "ineffa":
-                // "Ineffa" isn't in the Vosk vocabulary, so it comes out as similar-sounding
-                // words. Variants below were collected by running synthesized speech of each
-                // pronunciation through the model; longer phrases first.
-                wakeTriggers = new String[] {
-                        "ineffa",
-                        // ee-neff-uh (preferred)
-                        "he never", "enough for", "enough off", "enough on", "enough i", "innova",
-                        "in a fact", "in a far", "ina far", "ina ah", "in a fuck", "it never",
-                        // eye-neff-uh
-                        "i have never", "i have ever", "i an effort", "i never",
-                        // ih-neff-uh
-                        "i each never", "each never", "i h never", "i'd never", "i've never",
-                        "and never", "in never", "in ever", "in africa", "in alpha", "in a for", "in for" };
-                break;
-            case "cortana":
-                wakeTriggers = new String[] { "cortana", "cortona", "core kana", "court on a", "court on", "quarter", "we're gonna", "corker" };
-                break;
-            default: // "jarvis"
-                // wakeTriggers = new String[] { "jarvis", "jervis", "darvish", "dervish",
-                // "dervis", "garbage",
-                // "jurgen", "drivers", "travis", "harvest", "journalist", "german", "germans",
-                // "georgia", "jarred", "target", "judge", "your this", "this", "jerks",
-                // "service" };
-                break;
         }
     }
 
@@ -209,38 +169,15 @@ public class UdpListener implements Runnable {
                             JsonObject jsonObject = gson.fromJson(resultJson, JsonObject.class);
                             String transcribedText = jsonObject.has("text") ? jsonObject.get("text").getAsString() : "";
 
-                            String jarvisRegex = "(?i)\\b(";
-                            for (int i = 0; i < wakeTriggers.length - 1; i++) {
-                                jarvisRegex += wakeTriggers[i] + " |";
-                            }
-                            jarvisRegex += wakeTriggers[wakeTriggers.length - 1] + " )\\b";
-
-                            String[] prefixCommands = { "good morning", "good night", "goodnight" };
-
-                            String overrideEndCasesForCommands = "";
-                            for (int i = 0; i < wakeTriggers.length; i++) {
-                                for (String prefCmd : prefixCommands) {
-                                    overrideEndCasesForCommands += prefCmd + " " + wakeTriggers[i] + "|";
-                                }
-                            }
-                            overrideEndCasesForCommands = overrideEndCasesForCommands.substring(0,
-                                    overrideEndCasesForCommands.length() - 1); // Remove last '|'
-
-                            String alternateWakeWordsRegex = "(?i)\\b(wake up daddy's home|wake up daddy home|we got daddy's home|we got daddy home|we've got daddy's home|we've got daddy home|coachella music|"
-                                    + overrideEndCasesForCommands + ")\\b";
-
-                            String cleanedText = transcribedText.replaceAll(jarvisRegex, "").trim();
-
                             long audioMs = completeAudioPayload.length / 32; // 16 kHz * 2 bytes = 32 bytes/ms
                             long recognizeMs = (System.nanoTime() - recognizeStart) / 1_000_000;
                             System.out.println("[+] Vosk Transcription (" + audioMs + " ms audio, "
                                     + recognizeMs + " ms to recognize): " + transcribedText);
 
-                            // Detect jarvis wake word to execute command and parse intent)
-                            if (transcribedText.isEmpty()
-                                    || transcribedText.toLowerCase().matches(".*" + jarvisRegex + ".*")
-                                    || transcribedText.toLowerCase().matches(".*" + alternateWakeWordsRegex + ".*")) {
-                                commandWorker.submit(() -> handleCommand(cleanedText));
+                            // Only act on utterances that open with the wake word
+                            String command = wakeWordMatcher.extractCommand(transcribedText);
+                            if (command != null) {
+                                commandWorker.submit(() -> handleCommand(command));
                             }
                         }
                     }

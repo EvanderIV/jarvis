@@ -82,6 +82,35 @@ public class IntentParserTest {
         assertEquals(Target.SPEAKER_ARRAY, c.target);
     }
 
+    @Test(expected = MissingContextualTargetException.class)
+    public void bareVerbDoesNotBorrowLastDevice() throws Exception {
+        parser.parse("play some music");
+        parser.parse("i got a kill");
+    }
+
+    @Test
+    public void contextExpires() throws Exception {
+        MutableClock clock = new MutableClock(LocalDateTime.of(2026, 10, 17, 14, 0));
+        IntentParser timed = new IntentParser(clock);
+        timed.parse("play some music");
+        clock.now = clock.now.plusMinutes(4);
+        assertEquals(Target.SPEAKER_ARRAY, timed.parse("turn it up").target);
+        clock.now = clock.now.plusMinutes(6);
+        try {
+            timed.parse("turn it up");
+            org.junit.Assert.fail("context should have expired");
+        } catch (MissingContextualTargetException expected) {
+        }
+    }
+
+    private static class MutableClock extends Clock {
+        LocalDateTime now;
+        MutableClock(LocalDateTime now) { this.now = now; }
+        @Override public ZoneId getZone() { return ZoneId.systemDefault(); }
+        @Override public Clock withZone(ZoneId zone) { return this; }
+        @Override public java.time.Instant instant() { return now.atZone(getZone()).toInstant(); }
+    }
+
     @Test
     public void napTriggers() throws Exception {
         // Phrasings as Vosk actually transcribed them

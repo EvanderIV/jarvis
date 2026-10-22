@@ -263,7 +263,7 @@ public class MusicManager {
 
         // 4. Pick a random track from available matches
         Track selectedTrack = availableTracks.get(random.nextInt(availableTracks.size()));
-        String fullPath = Paths.get(MUSIC_DIR, selectedTrack.file).toString();
+        String fullPath = resolvePlayablePath(MUSIC_DIR, selectedTrack.file);
 
         System.out.println("[*] MusicManager: Selected '" + selectedTrack.title + "' for theme: " + currentTheme);
 
@@ -293,6 +293,25 @@ public class MusicManager {
         }
 
         lmsController.playFile(targetMacs, fullPath);
+    }
+
+    /**
+     * Returns the path to play for a music.json entry. compress-music.sh re-encodes
+     * FLAC/WebM/etc. on the server to "<same name>.mp3" without touching music.json,
+     * so when the listed file is gone but its .mp3 twin exists, play that instead.
+     */
+    static String resolvePlayablePath(String musicDir, String file) {
+        Path listed = Paths.get(musicDir, file);
+        if (!Files.exists(listed)) {
+            int dot = file.lastIndexOf('.');
+            if (dot > 0) {
+                Path mp3 = Paths.get(musicDir, file.substring(0, dot) + ".mp3");
+                if (Files.exists(mp3)) {
+                    return mp3.toString();
+                }
+            }
+        }
+        return listed.toString();
     }
 
     /**

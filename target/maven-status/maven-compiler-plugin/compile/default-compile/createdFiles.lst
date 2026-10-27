@@ -1,4 +1,6 @@
+com\jarvis\TripwireListener$NodeState.class
 com\jarvis\MusicManager$LibraryRoot.class
+com\jarvis\TripwireListener$1.class
 com\jarvis\TimeExpressionParser.class
 com\jarvis\LmsController.class
 com\jarvis\RoutineEngine$RoutineRun.class
@@ -13,7 +15,10 @@ com\jarvis\ParsedCommand.class
 com\jarvis\TimerManager$Kind.class
 com\jarvis\RoutineEngine$RoutineBuilder.class
 com\jarvis\CommandFulfiller$1.class
+com\jarvis\TripwireListener$Cause.class
+com\jarvis\TripwireListener$PresenceListener.class
 com\jarvis\App.class
+com\jarvis\TripwireListener.class
 com\jarvis\Routines.class
 com\jarvis\NestListener.class
 com\jarvis\TimeExpressionParser$ClockMatch.class
@@ -32,6 +37,7 @@ com\jarvis\TimerManager$Entry.class
 com\jarvis\TimerManager.class
 com\jarvis\AudioAnalyzer$FadeoutInfo.class
 com\jarvis\MissingContextualTargetException.class
+com\jarvis\PodcastTrigger.class
 com\jarvis\RoutineEngine$RoutineStep.class
 com\jarvis\RoutineEngine.class
 com\jarvis\WakeWordMatcher.class

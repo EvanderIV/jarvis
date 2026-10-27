@@ -13,6 +13,7 @@ public class App {
 
     // The port your ESP32s/Python spoofers will target
     private static final int WAKE_WORD_PORT = 3900;
+    private static final int TRIPWIRE_PORT = 3901;
     public static String WAKE_WORD = "jarvis";
 
     public static void main(String[] args) {
@@ -70,6 +71,14 @@ public class App {
             nestThread.setDaemon(true);
             nestThread.start();
 
+            // 3.6. Doorway tripwire nodes on their own port (the wake-word listener drops foreign packets mid-command)
+            TripwireListener tripwireListener = new TripwireListener(TRIPWIRE_PORT);
+            PodcastTrigger podcastTrigger = new PodcastTrigger(musicManager, lmsController);
+            tripwireListener.addListener(podcastTrigger);
+            Thread tripwireThread = new Thread(tripwireListener, "TripwireListener");
+            tripwireThread.setDaemon(true);
+            tripwireThread.start();
+
             // Add a shutdown hook to close the socket cleanly if the server is killed
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 System.out.println("Shutting down server...");
@@ -125,6 +134,14 @@ public class App {
                 } else if (parts[0].equals("timers")) {
                     java.util.List<String> active = timerManager.describeActive();
                     System.out.println(active.isEmpty() ? "  (No timers or alarms set)" : "  " + String.join("\n  ", active));
+                } else if (parts[0].equals("room") && parts.length == 1) {
+                    java.util.List<String> nodes = tripwireListener.describeNodes();
+                    System.out.println(nodes.isEmpty() ? "  (No tripwire has reported yet)" : "  " + String.join("\n  ", nodes));
+                } else if (parts[0].equals("room") && (parts[parts.length - 1].equals("in") || parts[parts.length - 1].equals("out"))) {
+                    String node = parts.length >= 3 ? parts[1] : TripwireListener.BATHROOM;
+                    tripwireListener.setInside(node, parts[parts.length - 1].equals("in"));
+                } else if (parts[0].equals("podcast")) {
+                    podcastTrigger.play(true);
                 } else if (parts[0].equals("help")) {
                     System.out.println("Commands:");
                     System.out.println("  scan                      - Find new unregistered speakers on the network");
@@ -137,10 +154,14 @@ public class App {
                     System.out.println("  nest-verify               - List registered Nest devices and re-activate events");
                     System.out.println("  say <text>                - Run a command as if spoken (e.g., say set a timer for five minutes)");
                     System.out.println("  timers                    - List pending timers and alarms");
+                    System.out.println("  room                      - Show doorway tripwires (inside/outside, online, count)");
+                    System.out.println("  room [node] <in|out>      - Correct a tripwire's state (node defaults to bathroom_door)");
+                    System.out.println("  podcast                   - Play the latest podcast now (as if you just left the bathroom)");
                     System.out.println("  exit                      - Shut down the server");
                 } else if (parts[0].equals("exit")) {
                     System.out.println("[*] Stopping UDP Listener...");
                     triggerListener.stop();
+                    tripwireListener.stop();
                     scanner.close();
                     System.exit(0);
                 } else {

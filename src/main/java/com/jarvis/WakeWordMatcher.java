@@ -107,7 +107,7 @@ public class WakeWordMatcher {
                 // many ordinary sentences ("just like shooting where they're at") to be
                 // safe as a wake word, even when anchored to the start.
                 return new String[] { "jarvis", "jervis", "darvish", "dervish", "dervis", "garbage",
-                        "jurgen", "drivers", "travis", "harvest", "journalist", "german", "germans",
+                        "jurgen", "drivers", "travis", "harvest", "journalist", "journalists", "german", "germans",
                         "georgia", "george", "jarred", "target", "judge", "jerk", "jerks", "service",
                         "dravid", "turkish", "josh", "drugs" };
         }

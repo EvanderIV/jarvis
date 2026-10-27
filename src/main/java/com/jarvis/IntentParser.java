@@ -100,6 +100,7 @@ public class IntentParser {
             + "|(?:still|skill) (?:the|a) music"
             + "|feel the music"
             + "|kill(?: a| the)? music"
+            + "|fuel(?: a| the)? music"
             + "|kill them (?:move it|is it|it)"
             + "|kill (?:him|kilometers) (?:his iq|is it|is a)"
             + "|kill amelia"

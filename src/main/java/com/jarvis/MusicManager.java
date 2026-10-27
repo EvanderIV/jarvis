@@ -56,6 +56,12 @@ public class MusicManager {
     private volatile Thread playbackMonitorThread = null;
     private volatile boolean isContinuousPlayEnabled = false;
 
+    // A podcast plays as if it were one long track in the continuous-play loop, so the
+    // monitor notices when it ends and routine theme switches queue up behind it.
+    private static final double PODCAST_LET_FINISH_SECONDS = 15;
+    private boolean playingPodcast = false;
+    private String pendingPodcast = null; // starts when the current track ends
+
     // --- Data Model for JSON Parsing ---
 
     public static class LibraryRoot {
@@ -206,6 +212,9 @@ public class MusicManager {
         this.currentMaxSpeed = maxSpeed;
         this.targetMacs = new ArrayList<>(targetMacs);
         this.isContinuousPlayEnabled = true;
+        // An explicit play request replaces a podcast (playing or waiting to start)
+        this.playingPodcast = false;
+        this.pendingPodcast = null;
 
         applySpeakerRestrictions(this.currentTheme);
 
@@ -223,6 +232,23 @@ public class MusicManager {
      * track).
      */
     private synchronized void playNextTrack() {
+        if (pendingPodcast != null) {
+            startPodcast(pendingPodcast, targetMacs);
+            return;
+        }
+        if (playingPodcast) {
+            playingPodcast = false;
+            if (currentTheme == null) {
+                // Nothing was playing before the podcast, so there's nothing to go back to
+                System.out.println("[*] MusicManager: Podcast finished.");
+                isContinuousPlayEnabled = false;
+                playbackMonitorThread = null;
+                currentlyPlayingFile = null;
+                return;
+            }
+            System.out.println("[*] MusicManager: Podcast finished, resuming theme '" + currentTheme + "'.");
+        }
+
         if (!isContinuousPlayEnabled || currentTheme == null) {
             return;
         }
@@ -445,6 +471,65 @@ public class MusicManager {
     }
 
     /**
+     * Plays a podcast in place of the music. A track with under PODCAST_LET_FINISH_SECONDS
+     * left is allowed to finish first; otherwise it's cut off. When the podcast ends, the
+     * music theme that was playing resumes with a new track — including any theme change a
+     * routine queued in the meantime. If nothing was playing, playback just stops.
+     *
+     * @param idleSpeakers where to play when no music is playing (otherwise the music's speakers are used)
+     */
+    public synchronized void playPodcast(String path, List<String> idleSpeakers) {
+        if (playingPodcast || pendingPodcast != null) {
+            System.out.println("[*] MusicManager: A podcast is already playing or queued.");
+            return;
+        }
+        if (isContinuousPlayEnabled && currentlyPlayingFile != null) {
+            double left = secondsLeftInCurrentTrack();
+            if (left >= 0 && left < PODCAST_LET_FINISH_SECONDS) {
+                System.out.println("[*] MusicManager: Podcast queued; letting the current track finish ("
+                        + Math.round(left) + "s left).");
+                pendingPodcast = path;
+                return;
+            }
+        }
+        startPodcast(path, idleSpeakers);
+    }
+
+    private synchronized void startPodcast(String path, List<String> idleSpeakers) {
+        pendingPodcast = null;
+        if (!isContinuousPlayEnabled || currentTheme == null) {
+            // Speakers may be muted or at a routine's low volume from earlier; bring them to their defaults
+            currentTheme = null;
+            targetMacs = new ArrayList<>(idleSpeakers);
+            lmsController.unmute(targetMacs);
+            for (String mac : targetMacs) {
+                lmsController.setVolume(List.of(mac), lmsController.getDefaultVolume(mac, 60));
+            }
+        }
+        System.out.println("[*] MusicManager: Playing podcast " + path
+                + (currentTheme != null ? " (theme '" + currentTheme + "' resumes after)" : ""));
+        playingPodcast = true;
+        isContinuousPlayEnabled = true;
+        currentlyPlayingFile = path;
+        lastTrackStartTime = System.currentTimeMillis();
+        currentTrackFadeoutTimestamp = -1;
+        startPlaybackMonitor();
+        lmsController.playFile(targetMacs, path);
+    }
+
+    /** Seconds until the monitor moves on from the current track (fadeout point or end), or -1 if unknown. */
+    private double secondsLeftInCurrentTrack() {
+        List<String> speakers = targetMacs.isEmpty() ? lmsController.getAllRegisteredSpeakers() : targetMacs;
+        if (speakers.isEmpty()) return -1;
+        Map<String, Object> status = lmsController.getPlaybackStatus(speakers.get(0));
+        Double time = (Double) status.get("time");
+        Double duration = (Double) status.get("duration");
+        if (time == null || duration == null || duration <= 0) return -1;
+        double end = currentTrackFadeoutTimestamp > 0 ? Math.min(duration, currentTrackFadeoutTimestamp) : duration;
+        return Math.max(0, end - time);
+    }
+
+    /**
      * Switches to a new theme without interrupting the currently playing track.
      * If music is already running, the new theme takes effect on the next track.
      * If nothing is playing, starts playback immediately.
@@ -505,6 +590,8 @@ public class MusicManager {
         playbackMonitorThread = null;
 
         // Clear state
+        playingPodcast = false;
+        pendingPodcast = null;
         currentTheme = null;
         currentlyPlayingFile = null;
         currentTrackFadeoutTimestamp = -1;
